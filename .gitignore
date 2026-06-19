@@ -1,6 +1,14 @@
-node_modules/
-.env
-.cursor/mcp.json
-dist/
+/.idea/
+/.dart_tool/
+/.vscode/
+/pubspec.lock
 .DS_Store
-*.log
+**/.DS_Store
+
+# Local environment / secrets
+.env
+*.env
+
+# Files and directories created by dart_frog
+build/
+.dart_frog

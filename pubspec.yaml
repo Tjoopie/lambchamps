@@ -1,0 +1,24 @@
+name: lambchamps_df
+description: Lamb Champs backend — Dart Frog API for the single-competition livestock judging system.
+version: 1.0.0+1
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  crypto: ^3.0.7
+  dart_frog: ^1.2.6
+  dart_jsonwebtoken: ^2.14.0
+  firebase_admin: ^0.3.1+2
+  http: ^1.2.2
+  intl: ^0.20.2
+  mongo_dart: ^0.10.6
+  path: ^1.9.0
+  shelf_cors_headers: ^0.1.5
+  uuid: ^4.4.2
+
+dev_dependencies:
+  mocktail: ^1.0.3
+  test: ^1.25.4
+  very_good_analysis: ^5.1.0

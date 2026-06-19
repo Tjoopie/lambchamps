@@ -1,0 +1,12 @@
+.git
+.github
+.dart_tool
+.dart_frog
+build
+.cursor
+docs
+node_modules
+*.log
+.DS_Store
+.env
+*.env
