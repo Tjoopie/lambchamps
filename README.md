@@ -1,14 +1,13 @@
-# <APP_NAME>
+# Lambchamps
 
-Built on [DevCockpit](https://devcockpit.ai) - composable agentic infrastructure.
+Built on [DevCockpit](https://devcockpit.ai) — composable agentic infrastructure.
 
 ## Getting Started
 
 ### 1. Connect to DevCockpit
 
 Copy `.cursor/mcp.example.json` to `.cursor/mcp.json` and fill in:
-- `<YOUR_APP_ID>` - your app instance ID (e.g., `app_xxxxxxxxxxxx`)
-- `<YOUR_MCP_KEY>` - your MCP key (starts with `mcp_...`, get from admin)
+- `<YOUR_MCP_KEY>` — your MCP key (starts with `mcp_...`, get from admin)
 
 Restart Cursor. You should see ~200 tools in the MCP panel.
 
@@ -24,17 +23,11 @@ Follow the sequence in `.cursor/skills/devcockpit-platform.md`:
 3. `dc__propose_template_binding`
 4. `dc__confirm_template_binding`
 
-### 4. Set Up Automated Bug Fixing (Optional)
+### 4. Automated Bug Fixing (Built-in)
 
-The `dc_fix` server lets your Cursor automatically fix platform bugs:
-
-1. Get a Cursor API key from cursor.com/dashboard/integrations
-2. Get a GitHub PAT with repo + workflow scope
-3. Get a `DC_OPS_MCP_KEY` from your DevCockpit admin
-4. Fill in the `dc_fix` section in `.cursor/mcp.json`
-5. Copy the DevCockpit repo path into the `args` array
-
-When a platform tool fails, Cursor will automatically spawn a cloud agent to fix it.
+If a platform tool returns a 500 error, call `dc_fix__diagnose_and_fix` via your MCP
+connection. For config issues (403, missing scope), use `dc_fix__resolve_config`.
+Both spawn a cloud agent to diagnose and fix the issue automatically.
 
 ### 5. Check Your Mailbox
 
@@ -51,7 +44,7 @@ for the full guide. Key rules:
 
 ## Project Structure
 
-`
+```
 .cursor/
   skills/           # Cursor skill files for platform integration
   mcp.json          # MCP server connections (gitignored)
@@ -59,10 +52,11 @@ for the full guide. Key rules:
 src/                # Your app code
 .env                # Environment variables (gitignored)
 .env.template       # Template for .env
-`
+```
 
 ## Resources
 
 - [DevCockpit Portal](https://devcockpit.ai)
 - Platform skill: `.cursor/skills/devcockpit-platform.md`
 - Fix protocol: `.cursor/skills/platform-bug-fix-protocol.md`
+- App ID: `app_wxppx6-6v5Wb`
