@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "devcockpit": {
+      "url": "https://dev.devcockpit.ai/mcp/app/<YOUR_APP_ID>",
+      "headers": {
+        "Authorization": "Bearer <YOUR_MCP_KEY>"
+      }
+    },
+    "dc_fix": {
+      "command": "node",
+      "args": [
+        "<PATH_TO_DC_REPO>/mcp-servers/dc-fix-server/index.js"
+      ],
+      "env": {
+        "CURSOR_API_KEY": "<YOUR_CURSOR_API_KEY>",
+        "DC_GITHUB_TOKEN": "<GITHUB_PAT_WITH_REPO_AND_WORKFLOW_SCOPE>",
+        "DC_OPS_MCP_KEY": "<OPS_SCOPED_MCP_KEY_FROM_ADMIN>",
+        "DC_OPS_APP_ID": "app_5UxnQWMZZ2Fa",
+        "DC_PLATFORM_URL": "https://dev.devcockpit.ai"
+      }
+    }
+  }
+}
