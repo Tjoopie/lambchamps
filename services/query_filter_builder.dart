@@ -1,5 +1,5 @@
 import '../constants/k.dart';
-import '../models/m_api_query_builder.dart';
+import '../routes_handlers/v1/handle_get.dart';
 
 /// Builds Mongo-compatible filter/limit/skip/sort maps from API query params.
 /// Used by POST /internal/query/build for Volcano agents (no mongo_dart selectors).
@@ -65,7 +65,7 @@ class QueryFilterBuilder {
       final pageInt = int.tryParse(page);
       if (pageInt == null || pageInt < 1) {
         return {'error': '"$kParamPage" parameter not a valid int > 0'};
-      };
+      }
       skip = limitInt * (pageInt - 1);
     }
 
