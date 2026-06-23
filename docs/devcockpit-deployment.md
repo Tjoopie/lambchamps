@@ -30,9 +30,13 @@
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/internal/qr/decode` | LC1 base64url + zlib + HMAC-8 verify |
+| POST | `/internal/qr/ingest` | Full QR result ingest flow |
+| POST | `/internal/qr/build-results` | Build result payload from QR batch |
 | POST | `/internal/query/build` | Build Mongo filter from query-builder params |
 | POST | `/internal/membership/reconcile` | Bidirectional group/user membership sync |
 | POST | `/internal/import/row` | Single animal upsert by `_id` |
+| POST | `/internal/leaderboard/recompute` | Recompute round or group leaderboard scores |
+| POST | `/internal/rounds/advance` | Advance to next round (top-X selection) |
 
 ### Environment (via DevCockpit secrets)
 
@@ -62,15 +66,19 @@ leaderboards:    { round: 1, rank: 1 }, { round: 1, group_number: 1 }
 memberships:     { user_id: 1, group_id: 1 } unique
 ```
 
-## Verification (2026-06-22)
+## Verification (2026-06-23)
 
 | Check | Result |
 |-------|--------|
 | Terminal transform (`lc-data-crud` list) | PASS |
 | CRUD list `round_config` | PASS |
 | Leaderboard recompute aggregate | PASS (empty seed) |
-| Backend health | PENDING deploy |
-| QR decode / membership HTTP | PENDING backend smoke |
+| Backend health (`GET /health`) | BLOCKED — 403 from app-backend proxy |
+| QR decode / membership HTTP steps | BLOCKED — 403 from app-backend proxy |
+| All Volcano `http` steps to `/internal/*` | BLOCKED — see `fix-needs-human.md` |
+
+> **Action required:** Backend Kong route not registered or Volcano HTTP steps
+> missing auth header. Follow `fix-needs-human.md` for step-by-step remediation.
 
 ## Transform steps
 

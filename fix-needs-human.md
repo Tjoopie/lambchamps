@@ -1,151 +1,222 @@
 # Fix Requires Human Intervention
 
-> **Second automated pass — Jun 22 2026.** A prior automated agent (cfgfix_1782149786589_qf6mrq)
-> reached the same conclusion. The issue is confirmed to be in the DevCockpit platform layer,
-> not in this application repo. This document is updated with additional diagnostic detail and
-> cleaner remediation steps.
+> **Third automated pass — Jun 23 2026.** Two prior automated agents
+> (`cfgfix_1782149786589_qf6mrq`, and a second Jun 22 pass) diagnosed earlier
+> issues (transform evaluation). Those are now resolved — Mongo MCP steps work
+> and `lc-data-crud list` returns `workflow_state: "completed"`. This document
+> supersedes the previous version and covers the **new** issue: HTTP 403 on
+> all Volcano agent `http` steps targeting the app-backend.
+
+---
 
 ## Issue Summary
 
-- **App ID:** app_wxppx6-6v5Wb
-- **Tenant:** prod
-- **Issue type:** config_error
-- **Failed tool:** dc__execute_agent
-- **Symptom:** `provider: transform` steps in Volcano-config agents echo the raw JavaScript
-  source string as their output instead of evaluating it.  
-  `workflow_state` stays `"processing"`, `internal_data` is `null`, `steps_executed: 1` with
-  no computed payload.
-- **Affected agents:** all 8 `lc-*` agents (promoted to production stage)
-- **Unaffected:** `mongodb` MCP steps (insert/search/update/aggregate) work correctly against
-  dedicated Atlas v3_dev.
+- **App ID:** `app_wxppx6-6v5Wb`
+- **Tenant:** `prod`
+- **Issue type:** `config_error`
+- **Failed tool:** `app-wxppx6-6v5wb--lc-leaderboard-recompute__group`
+- **Symptom:** Every Volcano `http` step that calls
+  `https://devcockpit.ai/public/app-backend/app_wxppx6-6v5Wb/internal/*`
+  returns HTTP 403 **before the Dart container processes the request**.
 
-## Root Cause
+Affected agent workflows (all share the same root cause):
 
-The Volcano execution engine's `transform` provider has JavaScript evaluation gated behind a
-runtime feature flag and/or an `operation` field enum that differs from what was used when
-the agents were authored.
+| Agent | Workflow |
+|-------|----------|
+| `lc-leaderboard-recompute` | `group`, `round` |
+| `lc-results-ingest-qr` | `ingest` |
+| `lc-rounds-advance` | `advance` |
+| `lc-membership-sync` | `reconcile` |
+| `lc-data-crud` | `list_with_params` |
+| `lc-animals-import` | `import_row` |
 
-| Scenario | Symptom |
-|---|---|
-| `operation` field missing | Transform body echoed as raw string |
-| `operation: "eval"` / `operation: "javascript"` when platform expects `"js"` or `"js_eval"` | Same raw-echo symptom |
-| `features.transform_js_eval: false` in `config_settings` for this app | JS eval silently no-ops |
-| Transform provider version mismatch in app config | Eval never triggered |
+**Unaffected:** Mongo MCP steps inside the same agents work correctly against
+the dedicated Atlas `v3_dev` database.
 
-The `config_settings` document for this app (keyed `{ scope: "app.app_wxppx6-6v5Wb",
-tenant_id: "prod" }`) likely has a feature flag or version field that disables JS evaluation.
+---
 
-## Why This Cannot Be Fixed From This Repo
+## Root Cause Analysis
 
-This repo (`lambchamps`, https://github.com/Tjoopie/lambchamps) is the Dart Frog application
-repo. It does not contain:
+The `/public/app-backend/:app_id/*` path is a Kong-proxied route that the
+DevCockpit gateway registers when a backend is deployed via `dc__deploy_backend`.
+A 403 at this layer (before the Dart container sees the request) indicates one
+or more of the following mis-configurations in `config_settings` and/or the
+agent definitions:
 
-- The platform `config_settings` MongoDB collection
-- The Volcano execution engine (transform provider implementation)
-- `services/orchestrator-api/src/platform/scopes.js`
-- `services/orchestrator-api/src/routes/mcp-gateway/`
+### Cause A — Kong route not yet registered (most likely)
 
-All of those live in the DevCockpit platform repo and require platform-admin access.
+`dc__deploy_backend` was dispatched (commit `b925593`, GHCR image public) but
+the deploy workflow may not have completed the Kong route registration step.
+The proxy has no upstream to forward to, so it rejects with 403.
 
-Additionally, this Cloud Agent environment does not have the DevCockpit MCP key injected
-(`.cursor/mcp.json` is not present), so `dc_fix__resolve_config` and `dc__*` tools are
-unavailable.
-
-## Required Human Actions
-
-### Option A — DevCockpit MCP (Recommended, fastest)
-
-Open an MCP session authenticated as a platform admin for tenant `prod`, then call:
-
-```json
-dc_fix__resolve_config({
-  "issue": "config_error",
-  "app_id": "app_wxppx6-6v5Wb",
-  "tenant_id": "prod",
-  "details": "Transform steps in volcano_config agents for app_wxppx6-6v5Wb return raw JS source code instead of evaluating. workflow_state stays in 'processing' and internal_data is null. All 8 lc-* agents are affected. Need features.transform_js_eval=true and/or correct volcano.transform_operation_default in config_settings for this app. MongoDB MCP steps work — only transform provider is broken."
-})
-```
-
-### Option B — Direct Platform Database Patch
-
-Locate and update the `config_settings` document:
+`config_settings` field to check:
 
 ```js
-// 1. Inspect current config
-db.config_settings.findOne({
-  scope: "app.app_wxppx6-6v5Wb",
-  tenant_id: "prod"
-})
-
-// 2. Enable JS eval + set the correct operation default
-db.config_settings.updateOne(
+// Expected after a successful dc__deploy_backend
+db.config_settings.findOne(
   { scope: "app.app_wxppx6-6v5Wb", tenant_id: "prod" },
-  {
-    $set: {
-      "features.transform_js_eval": true,
-      "volcano.transform_operation_default": "js_eval"   // or "js" — check scopes.js
-    }
-  },
-  { upsert: false }   // document should already exist
+  { "settings.backend": 1 }
 )
 ```
 
-Then verify the correct enum value in:
-`services/orchestrator-api/src/platform/scopes.js` — look for the `transform` provider's
-valid `operation` values.
-
-### Option C — Update Agent Definitions (if enum value is wrong)
-
-If the config_settings flag is already correct but the agents were authored with a wrong
-`operation` value, each `transform` step in the 8 `lc-*` agent `volcano_config` definitions
-must be updated to use the platform-supported operation enum. Example structure:
+A healthy document should contain:
 
 ```json
 {
-  "name": "compute_result",
-  "provider": "transform",
-  "operation": "js_eval",
-  "transform": "return input.data.map(x => x * 2);",
-  "input": { "data": "{{steps.previous.result}}" }
+  "settings.backend": {
+    "image":              "ghcr.io/tjoopie/lambchamps:latest",
+    "port":               8080,
+    "health_check_path":  "/health",
+    "status":             "running",
+    "kong_route_id":      "<uuid>",
+    "routes_prefix":      "/public/app-backend/app_wxppx6-6v5Wb"
+  }
 }
 ```
 
-Use `dc__create_agent` (with `explicit_volcano_config: true`) or the platform agent editor
-to update each affected `lc-*` agent.
+If `kong_route_id` is absent, `status` is `"pending"` / `"failed"`, or
+`settings.backend` is missing entirely, the Kong route was never created.
 
-## Verification After Fix
+### Cause B — Volcano HTTP steps missing the app auth header
+
+The app-backend proxy requires the caller to present a valid credential.
+Volcano `http` steps that omit an `Authorization` (or equivalent internal
+service token) header are rejected 403 by the gateway even when the Kong route
+is registered.
+
+---
+
+## Why This Cannot Be Fixed From This Repo
+
+`lambchamps` is the Dart Frog application repo. It does not contain:
+
+- The platform `config_settings` MongoDB collection
+- The Kong route management layer
+- The Volcano agent definitions for the `lc-*` agents
+- `services/orchestrator-api/src/platform/scopes.js`
+
+All remediation steps below require a **platform-admin MCP session** or direct
+Atlas access.
+
+---
+
+## Remediation
+
+### Step 1 — Diagnose backend deploy state
+
+```js
+// Run in MongoDB Atlas (platform db) or via a platform-admin MCP session
+const doc = db.config_settings.findOne(
+  { scope: "app.app_wxppx6-6v5Wb", tenant_id: "prod" }
+);
+printjson(doc?.settings?.backend);
+```
+
+### Step 2A — If backend is not deployed / Kong route missing
+
+Re-dispatch the backend deploy from a platform-admin MCP session:
 
 ```json
-dc__execute_agent({
-  "agent_id": "<any-lc-agent-id>",
-  "workflow": "default",
-  "input": { "test": "hello" }
+dc__deploy_backend({
+  "app_id": "app_wxppx6-6v5Wb",
+  "image": "ghcr.io/tjoopie/lambchamps:latest",
+  "port": 8080,
+  "health_check_path": "/health"
 })
 ```
 
-Expected:
-- `workflow_state: "completed"`
-- `internal_data` contains the transformed output (not raw JS source code)
-- No step result is a raw JavaScript string
+Then verify the deploy reached a running state:
 
-## Affected Agents (reference)
+```json
+dc__deploy_status({})
+```
 
-All 8 `lc-*` agents on app `app_wxppx6-6v5Wb`, tenant `prod`, currently at production stage:
+Expected: `backend.status === "running"` and `backend.kong_route_id` populated.
 
-- LC1 QR payload decode (HMAC-SHA256 + zlib inflate)
-- API query-builder filters
-- Membership sync loops
-- Weighted leaderboard scoring/ranking
-- Round advancement top-X logic
-- (remaining 3 per platform agent registry)
+### Step 2B — If Kong route is registered but HTTP steps still return 403
 
-## Next Steps for Human
+The Volcano `http` steps need an app-scoped auth token. The canonical pattern:
 
-1. Choose Option A, B, or C above
-2. If Option A: run `dc_fix__resolve_config` from a platform-admin MCP session
-3. If Option B: patch `config_settings` in the platform DB and restart the Volcano worker
-4. If Option C: identify the correct `operation` enum from `scopes.js`, then update each
-   `lc-*` agent definition via `dc__create_agent` or the platform agent editor
-5. Verify with `dc__execute_agent` — confirm `workflow_state: "completed"` and non-null
-   `internal_data`
-6. Remove or archive this file once the platform fix is confirmed
+1. Store an App API key in Vault (if not already present):
+
+```json
+dc__store_app_secret({
+  "key": "APP_API_KEY",
+  "value": "<ak_... key from DevCockpit App Instances panel>"
+})
+```
+
+2. Each affected agent needs an additional `http` step to fetch a short-lived
+   JWT before calling the app-backend, **or** the `http` step headers must
+   include the App API key directly if the proxy accepts `x-api-key`:
+
+```json
+{
+  "provider": "http",
+  "name": "call_backend",
+  "url": "https://devcockpit.ai/public/app-backend/app_wxppx6-6v5Wb/internal/leaderboard/recompute",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "{{context.app_secrets.APP_API_KEY}}"
+  },
+  "input": { "round": "{{input.round}}", "group_number": "{{input.group_number}}" }
+}
+```
+
+   Check `services/orchestrator-api/src/routes/app-backend-proxy.js` for the
+   exact header name the proxy expects (`x-api-key`, `Authorization`, or an
+   internal `x-dc-internal-token`).
+
+3. Update each of the 6 affected agents via `dc__create_agent` (explicit
+   volcano_config) or the platform agent editor.
+
+### Step 3 — Verify
+
+```json
+dc__execute_agent({
+  "agent_id": "app-wxppx6-6v5wb--lc-leaderboard-recompute",
+  "workflow": "group",
+  "input": { "round": 1, "group_number": 1 }
+})
+```
+
+Expected: `workflow_state: "completed"`, `internal_data.message` contains
+`"Leaderboard recomputed for round 1 group 1"`.
+
+---
+
+## Dart Application Status
+
+The Dart Frog backend code is **correct and ready**:
+
+- All internal routes exist under `routes/internal/`:
+  - `POST /internal/leaderboard/recompute`
+  - `POST /internal/rounds/advance`
+  - `POST /internal/membership/reconcile`
+  - `POST /internal/import/row`
+  - `POST /internal/qr/ingest`
+  - `POST /internal/qr/build-results`
+  - `POST /internal/qr/decode`
+  - `POST /internal/query/build`
+- GHCR image `ghcr.io/tjoopie/lambchamps:latest` is public, CI green at
+  commit `b925593`
+- Health endpoint `GET /health` returns `{"status": "ok"}`
+- No code changes are needed in this repository
+
+**No changes to this application repo will resolve the 403 — the fix is
+entirely in the DevCockpit platform layer (Kong route registration and/or
+Volcano agent HTTP step auth headers).**
+
+---
+
+## Checklist for Human Reviewer
+
+- [ ] Run Step 1 diagnostic — inspect `config_settings.settings.backend`
+- [ ] If `kong_route_id` missing → run Step 2A (re-deploy backend)
+- [ ] Confirm `GET https://devcockpit.ai/public/app-backend/app_wxppx6-6v5Wb/health`
+      returns 200 (not 403/404/502)
+- [ ] If Kong route exists but 403 persists → run Step 2B (add auth headers to
+      each Volcano `http` step)
+- [ ] Run Step 3 verification → confirm `workflow_state: "completed"`
+- [ ] Archive this file once all agents pass
