@@ -1,97 +1,52 @@
-# Lamb Champs — DevCockpit Deployment
+# DevCockpit Deployment Runbook (LAMBCHAMPS)
 
-## App instance
+## App Target
+- App ID: `app_6uGYXH7Zvzq3`
+- Tenant ID: `prod`
+- Environment target: `production` at `https://devcockpit.ai`
+- Primary hosted URL: `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Subdomain URL: `https://app_6uGYXH7Zvzq3.devcockpit.ai/`
+- Default path-hosted base: `/apps/app_6uGYXH7Zvzq3/`
 
-| Key | Value |
-|-----|-------|
-| App ID | `app_wxppx6-6v5Wb` |
-| Agent prefix | `app-wxppx6-6v5wb--` |
-| Public API | `https://devcockpit.ai/public` |
-| Dedicated Mongo | `v3_dev` (Atlas URI configured in DevCockpit secrets) |
+## Canonical Docs
+- Environment deployment guide: `docs/current-deployment/PRODUCTION_DEPLOYMENT_GUIDE.md`
+- Frontend build guide: `docs/guides/BUILDING_FRONTEND_APPS.md`
+- Handoff runbook: `docs/runbooks/external-app-handoff-runbook.md`
 
-## Architecture
+## Deployment Flow
+1. Call `dc__deploy_app` before each deploy so you use the live upload instructions for this exact app/environment.
+2. Build the frontend artifact (for example `npm run build`).
+3. Package the build from inside the output directory so `index.html` is at the archive root.
+4. Deploy to sandbox (default): upload without target or with `target=sandbox`. Test at `https://sandbox.devcockpit.ai/apps/<app_id>/`.
+5. When ready for farmers/users: call `dc__promote_app` to create a pending promotion, have the developer review the sandbox URL, then call `dc__confirm_promotion` with the promotion_id.
+6. After deploy, hard refresh once so the injected `env-config.js` is reloaded before debugging auth or runtime issues.
 
-- **Volcano agents** — CRUD, reads, aggregation, response shaping (object `transform` steps only).
-- **Compute backend** — Dart Frog container for crypto (HMAC/zlib), membership reconcile loops, query-builder, single-row import.
-- **Flutter** — calls `POST /public/agents/execute` with Contact JWT.
+## Packaging Commands
+1. macOS/Linux: `cd dist && zip -r ../build.zip . && cd ..`
+2. Windows PowerShell: `tar.exe -a -cf build.zip -C dist .`
 
-## Compute backend
+## Important Notes
+- Deploys go to SANDBOX by default. Farmers never see sandbox deploys until you call `dc__confirm_promotion` after human review.
+- Direct production deploy: pass `target=production` to the upload endpoint or `dc__deploy_app({ target: "production" })` only when intentionally skipping sandbox.
+- Sandbox URL: `https://sandbox.devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Production URL: `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Production traffic uses `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/` after promotion.
+- If you build for the default DevCockpit path host, set `base: '/apps/app_6uGYXH7Zvzq3/'` in Vite so asset paths resolve under the hosted route.
+- For client-side routers such as React Router BrowserRouter, read `window.__DEVCOCKPIT__.APP_BASE_PATH` and use it as the router basename (default `/apps/app_6uGYXH7Zvzq3`).
+- Use `dc__deploy_app` as the canonical deploy path instead of relying on stale historical curl commands.
+- Zip from inside the build output directory so `index.html` is at the archive root.
+- Sandbox zip deploy replaces the hosted tree (no overlay-merge) and extracts every member. Missing `/apps/<app_id>/_next/*` 404s — it is not index.html.
+- Successful zip/promote receipts include `cdn_invalidated: true` and a Cloudflare `purge_id` for this app's hosted paths (gate 3). Origin already sends Cache-Control: no-cache; CF still had to be purged.
+- After any deploy that changes hosted config, Firebase config, or hosted self-signup, hard refresh once so `window.__DEVCOCKPIT__` is fresh.
+- Hosted deploys auto-inject a runtime error overlay so uncaught errors render visibly instead of failing to a blank screen.
+- window.__DEVCOCKPIT__.ENVIRONMENT is `sandbox` or `production` based on deploy target — use it to show a sandbox banner.
+- Direct upload endpoint reference: `https://devcockpit.ai/api/apps/app_6uGYXH7Zvzq3/deploy` (requires an `ak_*` App API key, not the MCP token).
+- Packaging rule: Zip must contain index.html at root. Create zip from INSIDE the build output directory (cd dist && zip -r ../build.zip .). On Windows use tar.exe -a -cf. Deploy replaces the previous tree; it does not overlay-merge leftover hashed assets.
+- Multi-route support: Next.js app-router static exports with per-route index.html files (e.g. admin/index.html, dashboard/index.html) are fully supported. All index.html files get asset path rewriting, env-config.js injection, and the hosted runtime error guard.
+- env-config.js: env-config.js is auto-injected on deploy as a real <script src> with ?v=DEPLOY_VERSION. Mentioning env-config.js in a comment or dynamic loader is not enough. All values are available at runtime via window.__DEVCOCKPIT__, including APP_BASE_PATH for router basename and DEPLOY_VERSION for cache-busting diagnostics. Prove inject with GET /apps/<app_id>/env-config.js?v=<version> — the bare URL can be a stale CDN HIT.
 
-| Setting | Value |
-|---------|-------|
-| Image | `ghcr.io/tjoopie/lambchamps:latest` |
-| Port | `8080` |
-| Health | `GET /health` |
-| Public prefix | `/public/app-backend/app_wxppx6-6v5Wb` |
-| Base URL | `https://devcockpit.ai/public/app-backend/app_wxppx6-6v5Wb` |
-
-### Internal routes (Volcano `http` steps only)
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/internal/qr/decode` | LC1 base64url + zlib + HMAC-8 verify |
-| POST | `/internal/qr/ingest` | Full QR result ingest flow |
-| POST | `/internal/qr/build-results` | Build result payload from QR batch |
-| POST | `/internal/query/build` | Build Mongo filter from query-builder params |
-| POST | `/internal/membership/reconcile` | Bidirectional group/user membership sync |
-| POST | `/internal/import/row` | Single animal upsert by `_id` |
-| POST | `/internal/leaderboard/recompute` | Recompute round or group leaderboard scores |
-| POST | `/internal/rounds/advance` | Advance to next round (top-X selection) |
-
-### Environment (via DevCockpit secrets)
-
-- `MONGO_URI` — Atlas connection string (required)
-- `SUBMISSION_SIGNING_SECRET` — defaults to `lamb-champs-dev-secret` in code if unset
-
-## Agents (production)
-
-| Agent | Workflows |
-|-------|-----------|
-| `lc-data-crud` | `list`, `list_with_params`, `get`, `create`, `update`, `delete` |
-| `lc-auth-login` | `login` |
-| `lc-membership-sync` | `reconcile`, `add_user_to_group`, `remove_user_from_group`, `set_group_judges` |
-| `lc-animals-import` | `import_batch`, `import_row` |
-| `lc-results-ingest-qr` | `ingest` |
-| `lc-leaderboard-recompute` | `group`, `round` |
-| `lc-leaderboards-read` | `read` |
-| `lc-rounds-advance` | `advance` |
-
-## Mongo indexes (apply once in Atlas UI)
-
-```
-users:           { firebase_uid: 1 }, { deleted: 1 }
-animals:         { firebase_uid: 1 }, { group_id: 1, deleted: 1 }
-judging_results: { qr_batch_id: 1 }, { round: 1, animal_id: 1 }, { deleted: 1 }
-leaderboards:    { round: 1, rank: 1 }, { round: 1, group_number: 1 }
-memberships:     { user_id: 1, group_id: 1 } unique
-```
-
-## Verification (2026-06-23)
-
-| Check | Result |
-|-------|--------|
-| Terminal transform (`lc-data-crud` list) | PASS |
-| CRUD list `round_config` | PASS |
-| Leaderboard recompute aggregate | PASS (empty seed) |
-| Backend health (`GET /health`) | BLOCKED — 403 from app-backend proxy |
-| QR decode / membership HTTP steps | BLOCKED — 403 from app-backend proxy |
-| All Volcano `http` steps to `/internal/*` | BLOCKED — see `fix-needs-human.md` |
-
-> **Action required:** Backend Kong route not registered or Volcano HTTP steps
-> missing auth header. Follow `fix-needs-human.md` for step-by-step remediation.
-
-## Transform steps
-
-Use **object** transforms with `{{steps.*}}` placeholders only. Never put JavaScript strings in `transform` fields.
-
-```json
-{
-  "provider": "transform",
-  "name": "terminal_response",
-  "transform": {
-    "success": true,
-    "workflow_state": "completed",
-    "internal_data": { "data": "{{steps.search.result}}" }
-  }
-}
-```
+## Post-Deploy Verification
+1. Open `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`.
+2. Confirm the default hosted URL serves the new build.
+3. Hard refresh once to pick up the injected `env-config.js`.
+4. Verify `window.__DEVCOCKPIT__` contains `API_BASE_URL`, `APP_ID`, `TENANT_ID`, and any Firebase or hosted-signup fields your app expects.

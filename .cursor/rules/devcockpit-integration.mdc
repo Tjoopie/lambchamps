@@ -1,17 +1,19 @@
 ---
-description: DevCockpit Platform Integration — MCP tools, code management, deployment, and production safety for Lambchamps.
+description: DevCockpit Platform Integration — MCP tools, code management, deployment, and production safety for LAMBCHAMPS.
 globs:
 alwaysApply: true
+setup_prompt_version: 2026.09.15
+last_scar_date: 2026-09-15
 ---
 
 # DevCockpit Runtime Integration
 
 ## Connection
-- App ID: `app_wxppx6-6v5Wb`
+- App ID: `app_6uGYXH7Zvzq3`
 - Tenant ID: `prod`
 - Environment target: `production` at `https://devcockpit.ai`
 - MCP server ID: `dc`
-- MCP endpoint: `https://devcockpit.ai/mcp/app/app_wxppx6-6v5Wb`
+- MCP endpoint: `https://devcockpit.ai/mcp/app/app_6uGYXH7Zvzq3`
 - MCP auth: Authorization: Bearer <mcp_key>
 - MCP transport: `streamable_http`
 
@@ -21,7 +23,7 @@ alwaysApply: true
 - This handoff targets production at https://devcockpit.ai. For sandbox testing, regenerate the payload from https://dev.devcockpit.ai instead of editing URLs by hand.
 
 ## MCP Connection Model
-- Scope: The endpoint is app-scoped to app_wxppx6-6v5Wb on tenant prod; requests are enforced server-side with app and tenant context.
+- Scope: The endpoint is app-scoped to app_6uGYXH7Zvzq3 on tenant prod; requests are enforced server-side with app and tenant context.
 - Primary surface today: `tools`
 - Discovery note: Treat tools/list as canonical discovery. Do not assume MCP resources or prompts are available for this app.
 - Configured alias in `.cursor/mcp.json`: `dc`
@@ -52,6 +54,7 @@ alwaysApply: true
 - If dc__export_app_contract returns `contract: null`, run dc__plan_architecture and/or dc__scaffold_app_domain to persist a baseline, then re-run dc__export_app_contract.
 - Call dc__tool_schema before first use of any tool.
 - Use dc__get_data_connection for runtime-safe storage and governed data-source guidance.
+- Call dc__list_platform_learnings for already-distilled platform lessons (not customer rows; not setup scars).
 
 ## Sync Rules
 - Do not hardcode agent counts, workflow counts, or historical payload shapes.
@@ -60,21 +63,21 @@ alwaysApply: true
 
 ## Tiering Model
 - `mcp`: use for tool discovery, agent execution, platform configuration, schema introspection, Living Memory recall/store. Avoid chatty runtime CRUD loops, high-frequency telemetry polling, bulk app-owned data sync.
-- `public_rest`: use for browser/runtime access to governed Memory, IoT, DAM, Entity, PIM, Relationships, and Agents. Avoid database administration, returning raw credentials, bypassing API Expose bindings.
+- `public_rest`: use for browser/runtime access to governed Memory, IoT, DAM, Entity, PIM, Relationships, Agents, and domain Events. Avoid database administration, returning raw credentials, bypassing API Expose bindings.
 - `direct_mongo`: use for PLATFORM-INTERNAL ONLY. Not available to application code. App data access goes through DC agents with mongodb MCP steps called via /public/agents/execute.. Avoid Everything. Application code MUST NEVER use MongoClient, mongoose, or any direct MongoDB driver..
 - `pulsar`: use for platform-internal event-driven ingestion, telemetry fan-out, interpreter normalization, async workflows. Avoid direct browser consumption, direct app-instance writes (use platform API endpoints instead).
 
 ## App Architecture Guide
 - Summary: How to build apps on DevCockpit. Read this before creating agents or inserting data.
-- Data rule: All app data should go through governed platform surfaces such as PIM, Entity Registry, DAM, Relationships, and Contextualizer instead of ad-hoc raw Mongo contracts.
-- PIM: Use PIM for structured domain objects such as patients, products, meals, supplements, and catalog-style records. Seed and manage business entities there instead of raw collections.
-- DAM: Use DAM for all files and images. DAM already provides upload, storage, vision extraction, OCR, metadata, thumbnails, and downstream linkage.
-- Contextualizer: Use Contextualizer (CTX) as the governed template/query layer for structured platform data. Call contextualizer-pipeline-v5.ensure_template (or dc__execute_agent) to resolve, enhance, or author templates — the pipeline now auto-routes to the right action based on confidence. Template IDs must come from the registry, never invented. All templates are global (not app-scoped) and persist automatically. Web search enriches templates for unfamiliar domains. The learning loop (promote_learning) improves template quality over time.
+- Data rule: The frontend is never source of truth. All app data goes through the contextualizer / governed doors into the seat's own database (PIM, Entity Registry, Living Memory, DAM, Relationships) — that is why each app has a database. SPA JSON, localStorage, sessionStorage, baked public/data, and committed zip media are cache only after a store-read proves persisted ids.
+- PIM: Use the PIM-cluster structure store (dc__pim_upsert) for templates routeToPlane() sends to pim (built_artifacts, assets, catalog products). Products, compatibility, and catalog rows live in PIM — first write is propose→confirm→upsert (dc__pim_upsert / dc__pim_upsert_smart or POST /public/pim/items). SPA-baked catalog JSON (public/data/*.json) is never the source of truth; client JSON is a cache/offline mirror only after a store-read proves persisted ids. Prefer waiting longer over baking CSV/charts/media into the zip. Use the Entity Registry (dc__entity_upsert) for parties, farms, animals, equipment instances, and other entity_registry-routed types. Prefer dc__pim_upsert_smart when unsure — the platform routes. Do not treat PIM as a generic dump for every business entity (parties stay in entity_registry). App-scoped GET /public/pim/items (and /cp/pim/products) projects entity_registry operational units already linked to that app as catalog products with the same id — do not remint; duplicate insert of that id is refused. Specs copy registry attributes when present and stay empty otherwise.
+- DAM: Use DAM for all files and images (dc__dam_ingest_url or POST /public/dam/assets/upload). Never treat Unsplash, committed zip media, or frontend-only files as the asset source of truth. The app may cache a DAM cdn_url only after ingest proves a persisted asset id. DAM already provides upload, storage, vision extraction, OCR, metadata, thumbnails, and downstream linkage.
+- Contextualizer: Use contextualizer-registry read workflows (get_template, resolve_templates, list_templates — the step-template ids ctx-template-get, ctx-template-resolve, ctx-template-list are accepted aliases) and governed MCP write tools (dc__pim_upsert_smart, dc__entity_upsert, dc__propose_template_binding). Template IDs must come from the registry, never invented. On missing templates, the authoring gate returns authoring_proposal_required — promote via dc__confirm_template_authoring before filing records.
 - Relationships: Use the Relationship Manager for entity-to-entity connections such as patient-to-profile, meal-to-plan, or asset-to-document.
 - Agent rule: App agents should orchestrate platform capabilities, not recreate them.
 - Do not: Do not create agents that wrap raw mongodb.search or mongodb.insert when PIM, Entity Registry, DAM, or Contextualizer already fit the use case.
 - Do not: Do not build custom vision agents when DAM analyze/process flows already exist.
-- Do not: Do not embed fixture data as runtime fallbacks; seed governed data into platform surfaces instead.
+- Do not: Do not embed fixture data, SPA-baked JSON (public/data/*.json), or committed media as the runtime source of truth; seed the seat DB via governed doors and treat client JSON / DAM cdn_url as cache only.
 - Do not: Do not fake chat streaming when /public/agents/chat with stream:true is available.
 - Do not: NEVER use MongoClient, mongoose, or any direct MongoDB driver in application code. All data access goes through DC agents with mongodb MCP steps.
 - Do not: NEVER use raw ANTHROPIC_API_KEY or OPENAI_API_KEY in application code. All LLM calls go through DC agents with anthropic or openai provider steps.
@@ -83,7 +86,7 @@ alwaysApply: true
 - Recommended pattern: App-scoped data reads/writes: Create app-scoped agents with mongodb MCP steps (search, insert, update, delete). These auto-route to the dedicated DB when configured. Call them via /public/agents/execute from the frontend.
 - Recommended pattern: Browser-facing bridge flows: prefer explicit workflows that end with terminal normalized JSON (`workflow_state: "completed"` plus structured `internal_data`) instead of loose multi-turn AI-designed flows.
 - Recommended pattern: Image analysis: DAM upload via /public/dam/assets/upload, then DAM process_image or DAM analyze_image plus optional post-processing agent.
-- Recommended pattern: Data writes: PIM, Entity Registry, DAM, or Relationships for platform-governed data. Governed records should only be stored once a contextualizer template is resolved. Use contextualizer-pipeline-v5.ensure_template — it automatically resolves existing templates, enhances partially-matching ones, or authors new ones as needed.
+- Recommended pattern: Data writes: PIM, Entity Registry, DAM, or Relationships for platform-governed data. Governed records should only be stored once a contextualizer template is resolved via dc__pim_upsert_smart, dc__entity_upsert, or dc__propose_template_binding → dc__confirm_template_binding. On authoring_proposal_required, use dc__confirm_template_authoring before upsert.
 - Recommended pattern: Chat: /public/agents/chat with stream:true for conversational SSE streaming with Living Memory auto-extraction.
 - Before you build: Your app contract was pre-configured during provisioning. Start with dc__export_app_contract to inspect it. If adjustments are needed, run dc__plan_architecture or dc__scaffold_app_domain to refine. Then validate with dc__validate_app_contract before creating agents or frontend CRUD.
 
@@ -98,12 +101,15 @@ These rules are non-negotiable. They override convenience, speed, and "it works"
 2. Expose API keys via NEXT_PUBLIC_ env vars for external services
    → Use: DevCockpit Vault (dc__store_app_secret) + agent pipeline
 
-3. Store app data in localStorage/sessionStorage as source of truth
-   → Use: Entity Registry, PIM, Living Memory, or DAM
-   → Exception: UI preferences (theme, layout), offline queues that drain to governed surfaces, and session tokens
+3. Use the frontend as source of truth — SPA JSON, localStorage, sessionStorage, baked public/data/*.json, or committed media (images/PDFs/docs in the zip)
+   → Use: contextualizer / governed doors into the seat's own database. Products → propose→confirm→PIM (dc__pim_upsert / dc__pim_upsert_smart or POST /public/pim/items). Entities → Entity Registry. Memories → Living Memory. Files → DAM.
+   → Exception: UI preferences (theme, layout), offline queues that drain to governed surfaces, session tokens, and cache/offline mirrors ONLY after a store-read proves persisted ids
+
+3b. Treat Unsplash, a committed zip file, or a frontend-only image/PDF path as the digital-asset source of truth
+   → Use: dc__dam_ingest_url or POST /public/dam/assets/upload. Cache the DAM cdn_url only after ingest proves a persisted asset id
 
 4. Hardcode template IDs without verifying they exist in the registry
-   → Use: contextualizer-pipeline-v5 ensure_template before first use
+   → Use: dc__discover_app_schema, dc__propose_template_binding, dc__pim_upsert_smart, or contextualizer-registry ctx-template-get / ctx-template-resolve
 
 5. Call copilot/agent workflows that don't exist on the deployed agent
    → Use: dc__list_agents to verify available workflows before coding
@@ -116,12 +122,14 @@ These rules are non-negotiable. They override convenience, speed, and "it works"
 
 2. All secrets stored in Vault, never in .env with NEXT_PUBLIC_ prefix (except Firebase browser config which is designed to be public)
 
-3. All structured data persisted to governed surfaces:
-   - Products → PIM
-   - Entities (farms, stations, readings) → Entity Registry
-   - Files/images → DAM
+3. All structured data persisted through governed doors into the seat's own database (that is why each app has a database). The frontend is never the source of truth:
+   - Products / compatibility / catalog → PIM (propose→confirm→upsert). Never ship the catalog as SPA-baked JSON as the source of truth.
+   - Entities (farms, stations, readings, parties) → Entity Registry
+   - Files/images/PDFs → DAM (dc__dam_ingest_url or DAM upload). Never Unsplash-as-SoT or committed zip media only. Cache DAM cdn_url after ingest.
    - Observations/scores/memories → Living Memory
    - Relationships → Relationship Manager
+   - Enquire/contact/dealer forms → governed write door + door_log receipt (no fake UI-only submit)
+   - Prefer waiting 15–30 minutes longer over baking CSV, charts, or media into the hosted zip
 
 4. Before creating any service file that calls an external API:
    - STOP and check: is there an API Ingest pipeline for this?
@@ -133,52 +141,51 @@ These rules are non-negotiable. They override convenience, speed, and "it works"
 - grep -r "fetch(" src/ — is any fetch going to a non-DC URL?
 - grep -r "NEXT_PUBLIC_" .env* — is any external API key exposed?
 - grep -r "localStorage" src/ — is any app data stored locally as source of truth (not just cache/queue)?
+- grep -r "public/data" src/ public/ — is any catalog or app record baked into static JSON as source of truth?
+- grep unsplash / public/images / committed media — is a digital asset living only on the frontend instead of DAM?
+- grep enquire/contact/dealer form handlers — does every submit persist through a governed door with a door_log receipt?
 
 If the answer to any of these is yes, STOP and refactor through DevCockpit surfaces before committing.
+
+## Platform Laws
+
+- Honest time: dc__emit_event and POST /public/events occurred_at must be ≤ now (+120s skew) or the platform refuses with occurred_at_in_future. Scenario future dates belong in payload attributes, not occurred_at. Browser query is GET /public/events or POST /public/events/query (same door as dc__query_events).
+- Event attributes must match the event_types schema; unknown attributes are rejected.
+- Machine tokens: entity_type and iku_category are machine-derived tokens (e.g. legal:company, iku-products). Never send display labels (Built-artifact, Specification/Class) as field values.
+- Pass-through: caller-provided entity types and relationship attributes are preserved; the model fills blanks only — supply types and attrs explicitly when you know them.
+- Identity: structural instances live in the Entity Registry. Ownership is rel:owned_by, never a forced owner field on the record.
+- Content documents route to the Entity Registry. rel:member_of spans Organism→Organism living collectives. rel:offspring_of carries parent_role. Organism is for living plants and animals only — do not invent Organism records for products, parties, or catalog rows.
+- Binding proposals expire after 30 minutes pending TTL — call dc__list_pending_proposals at session start.
+- Frontend is never source of truth: no app may use SPA JSON, localStorage, sessionStorage, baked public/data/*.json, or committed media (images/PDFs/docs in the zip) as the record of what exists. Everything goes through the contextualizer / governed doors into the seat's own database — PIM, Entity Registry, or Living Memory as the plane requires. That is why each app has a database. Prefer waiting 15–30 minutes longer over baking CSV, charts, or media into the hosted zip. Client JSON / localStorage / sessionStorage / a DAM cdn_url may cache or offline-mirror ONLY after a store-read proves persisted ids.
+- Seat writes: products, compatibility, and catalog rows MUST live in PIM via propose→confirm→upsert (dc__pim_upsert / dc__pim_upsert_smart or POST /public/pim/items). Digital assets (images, PDFs, docs) MUST go through DAM (dc__dam_ingest_url or DAM upload doors) — never Unsplash-as-SoT or frontend-only files; the app may cache a DAM cdn_url after ingest. Enquire/contact/dealer forms MUST persist through a governed door with a door_log receipt — a UI-only submit that looks successful but writes nothing is a defect. If a client asks to see the data in the database, the seat store must not be empty of what they were shown.
 
 ## Schema Governance — Templates
 
 Before writing ANY entity to PIM, Entity Registry, or Living Memory:
 
-1. Resolve the template:
-   dc__execute_agent({
-     agent_id: "contextualizer-pipeline-v5",
-     workflow: "ensure_template",
-     input: { entity_type: "<type>", context: "<description>" }
-   })
+1. Resolve the template via governed MCP tools:
+   - dc__discover_app_schema — blueprint for your domain
+   - dc__propose_template_binding → dc__confirm_template_binding — bind template to your app
+   - dc__pim_upsert_smart / dc__entity_upsert — classification + authoring gate (authoring_proposal_required → dc__confirm_template_authoring)
+   - contextualizer-registry read workflows: get_template, resolve_templates, list_templates (aliases: ctx-template-get, ctx-template-resolve, ctx-template-list)
 
 2. Use the returned template_id in all writes
 
 3. Pin the template_id as a constant in your code ONLY after step 1 confirms it exists in the registry
 
-4. NEVER invent template IDs. NEVER assume a template exists without checking.
+4. NEVER invent template IDs. NEVER call contextualizer-pipeline-v5 — it is internal-only and blocked by the MCP gateway.
 
 5. When setting up a new app instance, verify all pinned template IDs still resolve on the new instance's registry.
 
-## Circuit Breaker Rule — MANDATORY, NON-NEGOTIABLE
+## Seat Governance — APP SEAT RULEBOOK CORE
 
-This rule overrides all other instructions. No exceptions.
+This seat is bound by APP SEAT RULEBOOK CORE (served at handshake; repo source `docs/APP_SEAT_RULEBOOK_CORE.md`). Version at last edit: v2.
 
-If ANY dc_fix__ tool or dc__ platform tool returns:
-- 403, vault_http_403, scope_denied, permission denied → HARD STOP
-- Rate limited / 429 → Wait and retry once. If still blocked → HARD STOP
-- Timeout / 504 → Reconnect and retry once. If still failing → HARD STOP
-- 500 → Run dc_fix__diagnose_and_fix. If that also fails → HARD STOP
+The full core text arrives in the `handbook` field of the `dc__describe_platform` response — read it at session start. Denials and refusals (403, vault_http_403, scope_denied, permission denied, missing capability), the repair ladder, and escalation are governed by CORE laws 3–5.
 
-HARD STOP means:
-1. Stop ALL work on the current task immediately
-2. Run dc__handoff_post with: the exact error, the tool that failed, what was being attempted, and what manual resolution is needed
-3. Tell the user clearly: "I cannot proceed. Here is what needs manual resolution: [specific action]"
-4. Do NOT attempt any of the following:
-   - Alternative tools that achieve the same goal
-   - Direct API calls that bypass the failed tool
-   - Raw agent-registry, api-expose, or agent-manager calls as fallbacks
-   - Any creative workaround that routes around the permission failure
-5. Wait for the user to confirm the issue is resolved before continuing
+Transient errors are not walls: rate limited / 429 → wait and retry once; timeout / 504 → reconnect and retry once. Still failing → treat as a wall under the CORE.
 
-WHY: A permission failure means the platform has denied this action for a reason. Working around it can corrupt config, break auth, create orphaned resources, or escalate privileges beyond what the app instance is allowed. The cost of stopping is minutes. The cost of a bad workaround is hours of debugging or a security incident.
-
-SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 — that thought is the signal to STOP, not to proceed.
+After any hard stop, wait for the operator's explicit go before resuming. No self-resume.
 
 ## Contract State
 - Persisted contract: `not_configured_yet`
@@ -198,6 +205,66 @@ SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 �
 - If the planned contract still has unmet allowlist or binding requirements, run dc__scaffold_app_domain with `merge: true`.
 - Re-run dc__export_app_contract and then dc__validate_app_contract.
 
+## Human sign-in
+
+Browser contacts sign in through Firebase, then exchange for a Contact JWT. Do not invent a parallel identity door.
+
+1. **Hosted apps — Firebase ONLY from inject.** Read `window.__DEVCOCKPIT__` / injected `env-config.js` (`FIREBASE_*` or `FIREBASE_CONFIG`). Prove the inject on the hosted URL before wiring Auth. Never hardcode Firebase keys in the repo.
+2. **`dc__get_firebase_config` is NOT source of truth** — it is not the only Firebase source of truth. The door reconstructs the same FIREBASE_WEB_* / inject truth when the server can; otherwise it returns an honest `inject_only` empty (not a silent `{}` and not "Firebase disabled"). If empty, use the hosted inject. If the door returns values they must match inject. Do not lead with this MCP call.
+3. **Named Firebase app.** Set `FIREBASE_APP_NAME` per seat (e.g. `farmspace-drone`) via `initializeApp(config, name)` / `getApp(name)`.
+4. **Email:** `signInWithEmailAndPassword` → `user.getIdToken()` → `POST /public/identity/auth/exchange` `{ firebase_token, app_id }` → store Contact JWT in sessionStorage (seat-prefixed key) → `GET /public/identity/auth/me`. Retry the gateway once on HTTP 502/503/521.
+5. **Google:** `GoogleAuthProvider`, **popup-first**. Redirect ONLY on `auth/popup-blocked` | `auth/popup-closed-by-user` | `auth/cancelled-popup-request`. Call `getRedirectResult` on AuthProvider mount. No Google Identity Services (GIS).
+6. **Headers / workers:** No app COOP `same-origin`, no COEP `require-corp`, no auth service worker.
+7. **Firebase console:** Email + Google enabled. Authorized domains include `sandbox.devcockpit.ai`, `devcockpit.ai`, and every custom host.
+8. **New users (secondary):** hosted self-signup uses `dc__configure_hosted_self_signup` then register-token → register → exchange. Returning users are exchange-only. A register-token `403` with `fatal_for_signin: false` is a skip, not a sign-in failure.
+9. Put the Contact JWT in the `Authorization` header on `/public/*`. `GET /public/identity/auth/me` returns the stable contact id.
+10. Sandbox banner: read `window.__DEVCOCKPIT__.ENVIRONMENT` — never assume the hosted zip is production.
+
+Worked example (returning user, inject-first):
+```
+const inject = window.__DEVCOCKPIT__ || {};
+const cfg = inject.FIREBASE_CONFIG || {
+  apiKey: inject.FIREBASE_API_KEY,
+  authDomain: inject.FIREBASE_AUTH_DOMAIN,
+  projectId: inject.FIREBASE_PROJECT_ID,
+  storageBucket: inject.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: inject.FIREBASE_MESSAGING_SENDER_ID,
+  appId: inject.FIREBASE_APP_ID,
+};
+// Optional check: dc__get_firebase_config() reconstructs inject when it can; empty/inject_only is not "Firebase disabled" — prove login on the hosted URL. If it returns values they must match inject.
+const appName = inject.FIREBASE_APP_NAME || "farmspace-drone";
+const app = initializeApp(cfg, appName);
+const auth = getAuth(app);
+const { user } = await signInWithEmailAndPassword(auth, email, password);
+const firebase_token = await user.getIdToken();
+const exchanged = await fetch("/public/identity/auth/exchange", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ firebase_token, app_id })
+});
+// Retry once on 502 / 503 / 521. Returning users are exchange-only.
+// 403 on register-token with fatal_for_signin:false → skip register-token, use this exchange.
+const { token } = await exchanged.json();
+sessionStorage.setItem(`dc:${app_id}:contact_jwt`, token);
+const me = await fetch("/public/identity/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+// me.contact_id is the stable contact id for {{context.caller.id}} when kind is contact.
+```
+
+## App agent building blocks
+
+App agents compose Volcano step templates. Raw `mcp` / nested `agent` steps without `step_template_id` are refused at registration.
+
+- MongoDB templates (external-safe): `mongodb-search`, `mongodb-insert`, `mongodb-update`. Each step must carry `step_template_id`.
+- Terminal transform: `workflow_state: "completed"` and `internal_data` at the top level of the transform output.
+- Refusal transform: `success: false`, `workflow_state: "error"`, `internal_data.refusal` (reason + code).
+- Caller identity (read-only, credential-resolved): `{{context.caller.kind}}`, `{{context.caller.id}}`, `{{context.caller.app_id}}`, `{{context.caller.tenant}}`. Never take `caller` from input — the gateway strips and door-logs spoof attempts. Botport rooms/admin verbs read these fields from Volcano context / the execution record `caller` stamp.
+- v1 room chat emit is seat-level: Contact JWT or room-bound `ev_*` on `dc__emit_event` / `POST /public/events` (`event:room.note.posted`). A committed note fans out envelope-only wakes to bot members (`wake_ref` webhook-first, Vault wake key). Wake JSON carries secret-redacted `text_preview` (≤240, UI) and full secret-redacted `text` (no 240 slice). In-workflow `domain-event-emit` is not required for that path and is not shipped.
+- Domain events from a workflow (future): step templates `domain-event-emit` and `domain-event-query` (apps never write Pulsar). Actor is the agent id plus `context.caller`. Subjects outside the calling app are refused.
+
+## Data-source scope changes
+
+Until API_EXPOSE_CONTEXT ships, binding scope changes are made in App Instances via `PATCH /cp/api-expose/data-sources/:app_id/:binding_id`. After that carve-out, `app_id` and `tenant` resolve from the session; placeholders and cross-app binding ids are refused.
+
 ## Volcano Step Providers
 - `mcp` required: provider, mcp_server, mcp_tool. Optional: input, name, condition, continue_on_error.
 - `anthropic` required: provider, prompt. Optional: model, max_tokens, temperature, input, mcps, name, timeout, retry.
@@ -216,6 +283,7 @@ SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 �
 - Preferred step templates: `ctx-template-list`, `ctx-template-get`, `ctx-template-resolve`, `ctx-template-ensure-resolvable`, `ctx-iku-list`, `ctx-iku-get`, `ctx-iku-hierarchy`, `ctx-template-context-assemble`, `ctx-template-find-or-amend`
 - Discover or resolve a canonical template before governed writes.
 - Use ctx-template-context-assemble plus ctx-template-find-or-amend for governed template authoring flows.
+- Authored template mints via dc__propose_template_binding: pass kind + entity_type (leaf); pass subcategory (top-level or metadata.authored_subcategory) for authored id paths; pass attributes as an object map or metadata.attributes [{ key, type, value? }] — six fields in → six fields out; empty structural input → empty attribute surface.
 - API and IoT source identity must be logged in provenance fields such as source_entity_type, source_ref, mapping_id, decoder_id, api_id, endpoint_id, or device_id.
 - Provenance fields to preserve: `source_entity_type`, `source_ref`, `mapping_id`, `decoder_id`, `api_id`, `endpoint_id`, `device_id`
 
@@ -223,14 +291,46 @@ SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 �
 - The `templates` database is the Standards Plane — the platform's shared ontology. A 403 write guard is enforced at the MCP layer.
 - NEVER write to `template_registry` directly. NEVER use `mongo_insert` / `mongo_update` with `database: "templates"`.
 - NEVER invent template IDs (e.g. `tpl_weather_station_001`). Canonical format: `template:{iku}:{subcategory}:{type}`.
-- To discover existing templates by IKU category (`iku-products` for sensors/devices, `iku-environmental` for fields/parcels, `iku-digital-assets` for telemetry streams):
-  `dc__execute_agent({ agent_id: "contextualizer-registry", workflow: "ctx-template-list", input: { iku_category: "iku-products" } })`
-- To find or create a template for an entity your app needs:
-  `dc__execute_agent({ agent_id: "contextualizer-pipeline-v5", workflow: "default", input: { entity_type: "weather station", context: "IoT sensor with temperature, humidity, wind, rainfall deployed on a farm" } })`
-- The contextualizer searches for a matching template, creates one if none exists (correct ID format, UNSPSC, attributes, relationships), and returns the `template_id` for your app to use.
-- To create entity relationships: use `relationship-manager` agent, `semantic_upsert` workflow. Natural language input ("mounted on") is normalised to canonical type (`rel:mounted_on`).
+- Authoring steering uses explicit `kind` — one of the seven canonical kinds: Party, Place, Built-artifact, Organism, Specification/Class, Content, Abstract. Never author or steer with `iku_category`; it is buried legacy vocabulary (Stage 5b physical strip queued).
+- To browse templates (read-only): the `list_templates` workflow (alias `ctx-template-list`) accepts an optional `query` filter object. Legacy query filters such as `iku_category` still work inside `query` pending Stage 5b — read filters only; never use them for authoring or steering.
+  `dc__execute_agent({ agent_id: "contextualizer-registry", workflow: "list_templates", input: { query: { kind: "Built-artifact" } } })`
+- To bind a template to an entity (two-phase commit):
+  ```
+  // Step 1: Propose — resolves template, returns schema for operator review (no writes)
+  dc__propose_template_binding({
+    name: "Weather Station",
+    kind: "Built-artifact",
+    description: "IoT sensor with temperature, humidity, wind, rainfall deployed on a farm"
+  })
+  // Step 2: Confirm — commits entity to the correct data plane
+  dc__confirm_template_binding({ proposal_id: "tbp_..." })
+  ```
+- On authored intent: the classifier is advisory on your stated `kind`; if it disagrees, the proposal lands `pending_review` under the author's kind with `classifier_dissent` and `requires_manual_confirm: true` (7-day TTL). A payload carrying `iku_category` is ignored for binding decisions — it is a legacy field only.
+- Authored surface parameters for `dc__propose_template_binding` (structural input — prose alone authors nothing):
+  ```
+  dc__propose_template_binding({
+    name: "FarmSpace YouTube",
+    kind: "Content",
+    entity_type: "distribution_channel",
+    subcategory: "channel",
+    metadata: {
+      attributes: [
+        { key: "name", type: "string", value: "FarmSpace YouTube" },
+        { key: "description", type: "string", value: "Primary distribution surface" },
+        { key: "status", type: "enum", value: "active" },
+        { key: "languages", type: "array", value: ["en"] },
+        { key: "channel_platform", type: "enum", value: "youtube" },
+        { key: "distribution_scope", type: "string", value: "public" },
+      ],
+    },
+  })
+  ```
+  `subcategory` may instead be passed as `metadata.authored_subcategory`. Repair mints past a superseded tombstone require a distinct authored subcategory — tombstones are never revived in place.
+- Alternatively: dc__pim_upsert_smart / dc__entity_upsert when classification resolves automatically.
+- The platform searches for a matching template, routes authoring through the governed gate when needed, and returns the template_id for your app to use.
+- To create entity relationships: dc__propose_relationship_binding → dc__confirm_relationship_binding → relationship-manager__semantic_upsert. Confirm registers the proposal only (persisted:false, edge_exists:false); relationship-manager__semantic_upsert is the ONLY persisting step. List edges: dc__relationship_list or GET /public/relationships. To remove a bad edge: dc__relationship_delete with the Mongo _id.
 - All PIM writes use `dc__pim_upsert` (with a known template_id) or `dc__pim_upsert_smart` (auto-classifies and resolves template) — never direct MongoDB.
-- Write guard: The templates database is the Standards Plane — the platform's shared ontology. A 403 write guard is enforced at the MCP layer. App-scoped agents MUST NOT write to template_registry, invent template IDs, create collections in the templates database, or call mongo_insert/mongo_update with database: "templates". Governed template creation and amendment flows through contextualizer-pipeline-v5 (workflow: default) with entity_type + context inputs. The platform resolves, finds, or creates the canonical template and returns its ID.
+- Write guard: The templates database is the Standards Plane — the platform's shared ontology. A 403 write guard is enforced at the MCP layer. App-scoped agents MUST NOT write to template_registry, invent template IDs, create collections in the templates database, or call mongo_insert/mongo_update with database: "templates". Resolve templates via dc__discover_app_schema, dc__propose_template_binding, contextualizer-registry read workflows (get_template, resolve_templates — aliases ctx-template-get, ctx-template-resolve), or dc__pim_upsert_smart / dc__entity_upsert (classification + authoring gate). Never call contextualizer-pipeline-v5 from app instances — it is internal-only and blocked by the MCP gateway.
 
 ## Living Memory
 - Enabled: `yes`
@@ -239,6 +339,11 @@ SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 �
 - Context assembler: The context-assembler agent is not currently allowlisted for this app.
 - Public routes: `POST /public/memories`, `GET /public/memories/search`, `GET /public/memories/:entityId`, `GET /public/memories/:entityId/timeline`, `PUT /public/memories/:memoryId/outcome`
 - MCP tools: `dc__store_memory`, `dc__recall_memories`, `dc__search_memories`, `dc__search_memory_events`, `dc__get_memory_corroboration`
+
+## Platform Learnings
+- Store: `agent_definitions.operational_memory.learnings`
+- List: `dc__list_platform_learnings` · Get: `dc__get_platform_learning` (scope `platform:read`)
+- Already-distilled platform lessons. Customer feedback rows stay seat-owned. Setup-class scars are not in this store. Cross-app PIM still requires a grant and is not this tool. min_distinct_tenants remains 3.
 
 ## Agent Lifecycle
 - Supported platform tools: `dc__promote_agent`, `dc__archive_agent`, `dc__restore_agent`
@@ -250,36 +355,40 @@ SELF-CHECK: If you find yourself thinking "I could try X instead" after a 403 �
 - Contact JWT: `https://devcockpit.ai/public/identity/auth/exchange` with `firebase_token` + `app_id`
 
 ## App Deployment
-- Primary hosted URL: `https://devcockpit.ai/apps/app_wxppx6-6v5Wb/`
-- Subdomain URL: `https://app_wxppx6-6v5Wb.devcockpit.ai/`
-- Default path-hosted base: `/apps/app_wxppx6-6v5Wb/`
+- Primary hosted URL: `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Subdomain URL: `https://app_6uGYXH7Zvzq3.devcockpit.ai/`
+- Default path-hosted base: `/apps/app_6uGYXH7Zvzq3/`
 - Environment deployment guide: `docs/current-deployment/PRODUCTION_DEPLOYMENT_GUIDE.md`
 - Frontend build guide: `docs/guides/BUILDING_FRONTEND_APPS.md`
 - Reusable handoff runbook: `docs/runbooks/external-app-handoff-runbook.md`
 - Repo-local deployment doc: `docs/devcockpit-deployment.md`
-- Direct upload endpoint: `https://devcockpit.ai/api/apps/app_wxppx6-6v5Wb/deploy` (use an `ak_*` App API key, never the `mcp_*` key)
+- Direct upload endpoint: `https://devcockpit.ai/api/apps/app_6uGYXH7Zvzq3/deploy` (use an `ak_*` App API key, never the `mcp_*` key)
 - Deploys go to SANDBOX by default. Farmers never see sandbox deploys until you call `dc__confirm_promotion` after human review.
 - Direct production deploy: pass `target=production` to the upload endpoint or `dc__deploy_app({ target: "production" })` only when intentionally skipping sandbox.
-- Sandbox URL: `https://sandbox.devcockpit.ai/apps/app_wxppx6-6v5Wb/`
-- Production URL: `https://devcockpit.ai/apps/app_wxppx6-6v5Wb/`
-- Production traffic uses `https://devcockpit.ai/apps/app_wxppx6-6v5Wb/` after promotion.
-- If you build for the default DevCockpit path host, set `base: '/apps/app_wxppx6-6v5Wb/'` in Vite so asset paths resolve under the hosted route.
-- For client-side routers such as React Router BrowserRouter, read `window.__DEVCOCKPIT__.APP_BASE_PATH` and use it as the router basename (default `/apps/app_wxppx6-6v5Wb`).
+- Sandbox URL: `https://sandbox.devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Production URL: `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Production traffic uses `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/` after promotion.
+- If you build for the default DevCockpit path host, set `base: '/apps/app_6uGYXH7Zvzq3/'` in Vite so asset paths resolve under the hosted route.
+- For client-side routers such as React Router BrowserRouter, read `window.__DEVCOCKPIT__.APP_BASE_PATH` and use it as the router basename (default `/apps/app_6uGYXH7Zvzq3`).
 - Use `dc__deploy_app` as the canonical deploy path instead of relying on stale historical curl commands.
 - Zip from inside the build output directory so `index.html` is at the archive root.
+- Sandbox zip deploy replaces the hosted tree (no overlay-merge) and extracts every member. Missing `/apps/<app_id>/_next/*` 404s — it is not index.html.
+- Successful zip/promote receipts include `cdn_invalidated: true` and a Cloudflare `purge_id` for this app's hosted paths (gate 3). Origin already sends Cache-Control: no-cache; CF still had to be purged.
 - After any deploy that changes hosted config, Firebase config, or hosted self-signup, hard refresh once so `window.__DEVCOCKPIT__` is fresh.
 - Hosted deploys auto-inject a runtime error overlay so uncaught errors render visibly instead of failing to a blank screen.
 - window.__DEVCOCKPIT__.ENVIRONMENT is `sandbox` or `production` based on deploy target — use it to show a sandbox banner.
 
 ## Code Management
+- **MUST — GitHub for this seat is ONLY via MCP:** `dc__repo_status`, `dc__repo_pull`, `dc__repo_push`, `dc__repo_delete`.
+- **NEVER** use `git`, `gh`, SSH, or a personal PAT in the seat IDE. Never clone locally as the publish path.
+- Seat Vault `github_*` is provisioned once via `dc__provision_app_github` (founder/desk supplies the token into Vault through that door — seat agents do not store `github_token` in connector-secrets).
 - Repository: `lambchamps` (https://github.com/Tjoopie/lambchamps)
 - Commit: `dc__repo_push` with `files[]` (full contents) + `message` (conventional commits)
 - Read: `dc__repo_pull` for tree listing or file contents
 - Status: `dc__repo_status` for HEAD commit and branch info
 - Delete: `dc__repo_delete` with `paths[]` + `message`
 - Push does NOT auto-deploy — call `dc__deploy_backend` after pushing
-- Never use git, SSH, or request GitHub credentials from the user
-- Max 100 files per commit, full file contents only (no diffs)
+- Max 100 files per commit, full file contents only (no diffs); MCP allows ~5MB code-content payloads (TS/JSX exempt from content WAF)
 - Workflow: `dc__repo_pull` → build/edit → `dc__repo_push` → `dc__deploy_app` (sandbox) → test → `dc__promote_app` → `dc__confirm_promotion`
 
 ### Sandbox and Production Deploy
@@ -310,10 +419,10 @@ Call `dc__deploy_app` with `{ "target": "production" }` — only when intentiona
 2. Build/modify locally
 3. `dc__repo_push` → commit to GitHub
 4. `dc__deploy_app` → deploys to sandbox
-5. Test at `https://sandbox.devcockpit.ai/apps/app_wxppx6-6v5Wb/`
+5. Test at `https://sandbox.devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
 6. `dc__promote_app` → pending promotion + sandbox URL for developer review
 7. Developer confirms → `dc__confirm_promotion` with promotion_id
-8. Verify at `https://devcockpit.ai/apps/app_wxppx6-6v5Wb/`
+8. Verify at `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
 
 **You must NEVER:**
 - Deploy untested code directly to production
@@ -333,6 +442,7 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
 - Provider note: Some public APIs can reach an activated state without secrets (for example Open-Meteo).
 - Provider note: Some providers pause at requires_credentials until app connections or credentials are supplied (for example FieldClimate / METOS HMAC keys or AfriGIS OAuth/API credentials).
 - Verification: After bootstrap, verify the intended runtime surface (for example the product feature route or /public/api-ingest/status) instead of treating discovery alone as success.
+- Verification: If mint stored a product-root path (base_url + path missing the operation suffix), use dc__update_api_endpoint or the workspace Setup endpoints table. Do not remint and do not rewrite credentials.
 - Verification: Use dc__dam_ingest_url for provider docs/specs when the workflow needs structured reference material.
 - Verification: Keep provider, endpoint, mapping, and decoder identity in provenance fields such as source_entity_type, source_ref, mapping_id, decoder_id, api_id, or endpoint_id.
 - Timeout guidance: API setup is async by design. If a long call times out at the edge, reconnect MCP and continue the same session with dc__api_ingest_session_get or another dc__api_ingest_chat turn.
@@ -341,11 +451,14 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
 ## Boundaries
 - Not via MCP: Other apps, Other tenants, Direct Mongo shell access, Browser/frontend REST traffic, Raw database credentials or secret material, Direct Pulsar topic writes (use platform API endpoints only)
 - MongoDB path: There is no direct Atlas MCP connection in this setup. MongoDB is exposed through governed workflows and app-scoped agents. Standards Plane access is exclusively through contextualizer-registry Volcano workflows (ctx-template-*, ctx-iku-* step templates). App instances must not use direct MongoDB queries for standards/template data. Dedicated DB routing is automatic across MCP tool calls, /public/agents/execute, /public/agents/chat, and nested agent sub-steps.
-- Frontend runtime path: Frontends use /public/* REST routes with JWTs. They do not use MCP directly. All /cp/* routes require JWT in the Authorization header — hostname-based bypasses and query-param tokens are not supported. Static-export frontends should not rely on local Next.js API routes or server-only runtime env vars for secret-bearing production integrations; route those flows through DevCockpit public endpoints or app agents.
-- Pulsar boundary: App instances must never write directly to Pulsar topics. All event ingestion (IoT telemetry, audit logs, agent events) must flow through platform API endpoints which handle Pulsar routing internally.
-- Catalog write rule: All product/catalog data MUST use POST /public/pim/items (REST), dc__pim_upsert (MCP, requires template_id), or dc__pim_upsert_smart (MCP, auto-classifies). Direct MongoDB inserts to arbitrary collection names bypass shadow sync, template validation, and cross-app discovery. The standard PIM collection is "products" — do not create custom collection names like pim_items, catalog, content, items, etc. Violations cause products to be invisible in the DevCockpit PIM dashboard and to other apps.
+- Frontend runtime path: Frontends use /public/* REST routes with JWTs. They do not use MCP directly. All /cp/* routes require JWT in the Authorization header — hostname-based bypasses and query-param tokens are not supported. Static-export frontends should not rely on local Next.js API routes or server-only runtime env vars for secret-bearing production integrations; route those flows through DevCockpit public endpoints or app agents. The frontend is never the source of truth — SPA JSON, localStorage, sessionStorage, baked public/data, and committed zip media are cache/offline mirrors only after a store-read proves persisted ids.
+- Frontend never source of truth: No app ever uses the frontend as source of truth — not SPA JSON, localStorage, sessionStorage, baked public/data/*.json, or committed media in the zip. Everything goes through the contextualizer / governed doors into the seat's own database (PIM / Entity Registry / Living Memory as appropriate). That is why each app has a database. Client cache is allowed only after a store-read proves persisted ids. Prefer waiting 15–30 minutes longer over baking CSV, charts, or media into the hosted zip.
+- Pulsar boundary: App instances must never write directly to Pulsar topics. All event ingestion (IoT telemetry, audit logs, agent events, domain events) must flow through platform API endpoints which handle Pulsar routing internally. Use dc__emit_event or POST /public/events for timestamped domain facts (vaccinations, maintenance, inspections, posted jobs); structure is timeless, time flows through Pulsar.
+- Catalog write rule: All PIM-routed structure data MUST use POST /public/pim/items (REST), dc__pim_upsert (MCP, requires template_id), or dc__pim_upsert_smart (MCP, auto-classifies and routes). First-use is propose→confirm (dc__propose_template_binding → dc__confirm_template_binding) then upsert. This is an instance of the universal law: the frontend is never source of truth. SPA-baked catalog JSON (public/data/*.json), localStorage, and sessionStorage are NEVER the catalog source of truth — client JSON is a cache/offline mirror only after a store-read proves persisted ids. Prefer waiting 15–30 minutes longer over baking CSV/charts/media into the hosted zip. Enquire/contact/dealer forms must persist through a governed door with a door_log receipt. Parties and other entity_registry-routed templates use dc__entity_upsert. Direct MongoDB inserts to arbitrary collection names bypass shadow sync, template validation, plane routing, and cross-app discovery. The standard PIM collection is "products" — do not create custom collection names like pim_items, catalog, content, items, etc. Violations cause records to be invisible in the DevCockpit PIM dashboard and to other apps.
+- DAM write rule: Digital assets (images, PDFs, docs) MUST go through DAM — dc__dam_ingest_url or POST /public/dam/assets/upload. Never treat Unsplash, a committed zip file, or a frontend-only path as the asset source of truth. The app may cache a DAM cdn_url only after ingest proves a persisted asset id.
+- PIM legacy revoke: A PIM row whose template now canonical-routes to entity_registry cannot be content-written via dc__pim_upsert (TEMPLATE_PLANE_MISMATCH — correct). To retire it without raw delete: dc__pim_revoke_legacy({ id }). Own-store only: refuses NOT_OWN_STORE for another app, the shared catalog, or projected/shadow rows. Lifecycle-only: publish_state → revoked; row and history survive; default PIM lists hide revoked. Refuses with PIM_ROW_NOT_INERT if live relationship edges or pending template binding proposals hold the row. Stamps platform_audit_log (event_type pim_legacy_row_revoked) before the flip. dc__pim_delete remains a raw delete and is not the seat path.
 - Template IDs: Template IDs MUST be resolved from the contextualizer registry via ctx-template-get or ctx-template-resolve before use. Inventing template IDs (e.g. tpl_youtube_video) is not supported — they will not validate, will not trigger schema enforcement, and will not be discoverable by the platform. Use template:content:youtube_reel for YouTube assets, not custom IDs.
-- Standards Plane write guard: The templates database is the Standards Plane — the platform's shared ontology. A 403 write guard is enforced at the MCP layer. App-scoped agents MUST NOT write to template_registry, invent template IDs, create collections in the templates database, or call mongo_insert/mongo_update with database: "templates". Governed template creation and amendment flows through contextualizer-pipeline-v5 (workflow: default) with entity_type + context inputs. The platform resolves, finds, or creates the canonical template and returns its ID.
+- Standards Plane write guard: The templates database is the Standards Plane — the platform's shared ontology. A 403 write guard is enforced at the MCP layer. App-scoped agents MUST NOT write to template_registry, invent template IDs, create collections in the templates database, or call mongo_insert/mongo_update with database: "templates". Resolve templates via dc__discover_app_schema, dc__propose_template_binding, contextualizer-registry read workflows (get_template, resolve_templates — aliases ctx-template-get, ctx-template-resolve), or dc__pim_upsert_smart / dc__entity_upsert (classification + authoring gate). Never call contextualizer-pipeline-v5 from app instances — it is internal-only and blocked by the MCP gateway.
 
 ## Public Runtime Surfaces
 - **entity**
@@ -357,9 +470,9 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   GET /public/entity/search
 - **pim**
   GET /public/pim/items - stable PIM CRUD contract entrypoint; defaults to app_plus_shared when app_id is present. Pass include_shared=0 to restrict to app-owned rows only and inspect response.scope for scope_mode/requested_app_id/shared_catalog_included
-  POST /public/pim/items
+  POST /public/pim/items - create; response includes door_log_id + status (pending|failed|committed)
   GET /public/pim/items/:id
-  PUT /public/pim/items/:id
+  PUT /public/pim/items/:id - update; response includes door_log_id + status (pending|failed|committed)
   DELETE /public/pim/items/:id
 - **contextualizer**
   GET /api/templates - operator Contextualizer template registry surface (JWT required; not browser-public)
@@ -371,13 +484,13 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   POST /cp/contextualizer/ensure-template - control-plane 3-way pipeline (resolve/enhance/author) with entity memory write
   POST /cp/contextualizer/schema-import - control-plane schema import to draft templates
   IKU type behaviours (iku_type_config): 11 canonical IKUs each with type_behaviour (catalog|reference|event|spatial|workflow), instance_model, requires_uom, requires_relationships, pim_integration. Access via contextualizer-registry.get_iku_type_config or contextualizer-registry.list_iku_type_config workflows.
-  Template pipeline v5.1 workflows: ensure_template (resolve/enhance/author), author_template (Sonnet+web_search+Opus escalation, self-persists), enhance_template (merges attrs into existing template, version bump), promote_learning (crystallises feedback to operational_memory), validate_template, classify_entity, resolve_template, convert_uom, infer_relationships.
-  Web research: author_template and enhance_template use web-tools/web_search (Brave) with continue_on_error. Templates authored for unfamiliar domains (healthcare, industrial, etc.) include domain research context.
-  Learning loop: contextualizer-pipeline-v5 accumulates execution feedback via ExecutionLearner. Call contextualizer-pipeline-v5.promote_learning to crystallise feedback into operational_memory.learnings[]. All 6 LLM prompts in v5 include {{context.operational_memory.learnings_text}} (Yoda C21).
+  Template pipeline v5.1 (platform-internal): resolve/enhance/author workflows run inside the governed authoring engine — not callable from app instances.
+  Web research: author_template and enhance_template use web-tools/web_search (Brave) with continue_on_error. Templates authored for unfamiliar domains include domain research context.
 - **dam**
   GET /public/dam/assets
   POST /public/dam/assets/upload
   GET /public/dam/assets/:id
+  PATCH /public/dam/assets/:id - human Final OK / reject via human_status (approved|rejected); metadata.human_status is lifted; unknown keys 400. Response includes door_log_id + status (pending|failed|committed); unconfirmed means confirm by store read.
 - **relationships**
   GET /public/relationships
   POST /public/relationships
@@ -392,7 +505,7 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   GET /public/identity/auth/team
   POST /public/identity/auth/team/invite
   POST /public/identity/auth/register
-  POST /public/identity/auth/register-token - hosted browser self-signup bootstrap
+  POST /public/identity/auth/register-token - hosted browser self-signup bootstrap; 403 fatal_for_signin:false is a skip — returning users use exchange only
 - **agents**
   POST /public/agents/execute - one-shot agent execution, returns JSON result
   POST /public/agents/chat - conversational agent with history management; supports stream: true for SSE (events: conversation, status, result, done); pass conversation_id for multi-turn
@@ -405,6 +518,7 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   GET /public/iot/devices
   POST /public/iot/devices - register IoT device (device_id, model, decoder, metadata, product_id); requires iot:write + iot_devices data source write binding
   GET /public/iot/devices/:id
+  PATCH /public/iot/devices/:id - update product/unit pointers on an app-owned device (productId, sku, templateId); empty/null unbinds; register remains idempotent create; requires iot:write + iot_devices data source write binding
   GET /public/iot/telemetry - supports device_id, subject_entity_id, linked_parcel_id, linked_infrastructure_id, start_time, end_time, limit, offset, order
   GET /public/iot/telemetry/latest/:device_id
   GET /public/iot/telemetry/stats/:device_id
@@ -414,6 +528,20 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   GET /public/memories/:entityId
   GET /public/memories/:entityId/timeline
   PUT /public/memories/:memoryId/outcome
+- **events**
+  POST /public/events - emit a governed domain event (same door as dc__emit_event); body: event_type, occurred_at, subject, refs?, attributes?, marker?. Auth: App JWT / Contact JWT (entity:write) or room-bound ev_* (events.emit; v1 allowlist event:room.note.posted; subject must equal bound room_entity_id). Committed event:room.note.posted fans out envelope-only wakes to bot member seats (never the author); envelope has secret-redacted text_preview ≤240 plus full secret-redacted text
+  POST /api/apps/:app_id/events/credentials - mint a room-bound ev_* credential (Contact JWT app member or server-side App JWT). Body: room_entity_id, ttl_seconds null (non-expiring room.chat) or ≤3600 finite, purpose:"room.chat". Token returned once; later surfaces last4 only. Portal never mints mcp_* or general ak_*
+  POST /api/apps/:app_id/seats/:seat_id/wake-binding - Vault-bind wake URL+key for a bot seat (Contact JWT app member or App JWT). Returns last4, bound_at, bound_by, wake_host — never the key. HTTPS public hosts only
+  GET /api/apps/:app_id/seats/:seat_id/wake-binding - read wake bind receipt (last4 / bound_at / bound_by / wake_host)
+  GET /api/apps/:app_id/wake-receipts - app-scoped wake receipts (awaiting|sent|delivered|failing|denied) with run_id when the webhook returned one. Query: room_id, event_id, seat_id
+  POST /public/events/emit - emit alias (mirrors /internal/domain-events/emit)
+  GET /public/events - query domain events (same door as dc__query_events); query: event_type or comma-separated event_types, subject, entity_id, from_time, to_time, ref_slot, ref_id, limit
+  POST /public/events/query - query via JSON body (entity:read; not a write)
+  GET /public/events/query - query alias
+  GET /public/events/:eventType - query one type (event:job.posted or job.posted → event:job.posted)
+  POST /public/events/:eventType - emit with type in the path when body omits event_type
+- **serving**
+  GET /public/serving - live serving stamp from the running process (tag, sha, image_tag, deployed_at, bake_status). JWT required; any seat token. Missing fields are null — never ledger memory.
 - **oauth**
   GET /public/oauth/:provider/callback
   GET /public/oauth/:provider/authorize
@@ -427,6 +555,11 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   GET /public/api-ingest/pipelines/:id/playground-run
   POST /public/api-ingest/pipelines/:id/playground-run
   GET /public/api-ingest/history
+  GET /public/api-ingest/history/:id
+  GET /public/api-ingest/stored-values
+  GET /public/api-ingest/forecast-snapshots
+  GET /public/api-ingest/forecast-snapshots/compare
+  GET /public/api-ingest/forecast-snapshots/score
   GET /public/api-ingest/status
   POST /public/api-ingest/push/:provider_key/:api_id
 - **trekker**
@@ -465,14 +598,33 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
   Pipeline v5.1 ensure_template uses 3-way routing: confidence >= 0.85 → resolve_existing, 0.4-0.84 → enhance_existing (adds attributes to existing template, bumps version), < 0.4 or null match → author_new (creates and persists new template). The action field in the response indicates which path ran.
   enhance_template guarantees zero attribute removal: the Sonnet draft must output the full merged attribute array. Template ID is never changed. Version minor is always incremented.
   author_template is now self-persisting: it uses $setOnInsert with upsert:true so concurrent calls for the same entity type produce exactly one template (race-safe).
-  Template IDs MUST be resolved from the contextualizer registry via ctx-template-get or ctx-template-resolve (or dc__execute_agent contextualizer-pipeline-v5.ensure_template) before use. Do NOT invent template IDs.
-  Template binding confirmation: dc__pim_upsert_smart and dc__entity_upsert enforce a confirmation gate for first-time template adoption. When a template has not been used by your app before, the tool returns a proposal_required response directing you to use dc__propose_template_binding → review → dc__confirm_template_binding. This prevents silent template mismatches. Apps can configure template_confirmation.mode to "auto" or "threshold" in their settings to bypass the gate for high-confidence matches. Call dc__list_pending_proposals at session start to check for orphaned proposals.
-  Template authoring gate: when the contextualizer authors a new template from low-confidence input (<0.5), the template persists as pending_review and is invisible to resolution. dc__pim_upsert_smart and dc__propose_template_binding return authoring_proposal_required — no entity write occurs. Review via dc__list_pending_template_authoring, promote with dc__confirm_template_authoring, or reject with dc__reject_template_authoring.
-  Recommended bootstrap flow: (1) dc__describe_platform → understand capabilities, (2) dc__discover_app_schema → get your data model blueprint with templates, schemas, relationships, and plane routing, (3) dc__propose_template_binding per entity → confirm each template binding, (4) dc__pim_upsert / dc__entity_upsert → create entities with confirmed templates.
+  Template IDs MUST be resolved from the contextualizer registry via ctx-template-get or ctx-template-resolve, dc__discover_app_schema, dc__propose_template_binding, or dc__pim_upsert_smart / dc__entity_upsert (classification + authoring gate). Do NOT invent template IDs. Never call contextualizer-pipeline-v5 from app instances.
+  Template binding confirmation: dc__pim_upsert_smart and dc__entity_upsert enforce a mandatory structural binding gate on create — unbound writes (template_id missing or unconfirmed) are rejected fail-closed. When classification resolves a template that has not been confirmed for your app, the tool returns proposal_required directing you to dc__propose_template_binding → dc__confirm_template_binding. dc__confirm_template_binding writes Built-artifact units to entity_registry when target_plane is entity_registry or the template kind is Built-artifact — iku-products does not override that door (spec templates still go to PIM). Apps can configure template_confirmation.mode to "auto" or "threshold" in settings to bypass first-use confirmation only after a binding is established. Call dc__list_pending_proposals at session start to check for orphaned proposals.
+  Template authoring gate: ALL new template mints persist as pending_review until dc__confirm_template_authoring promotes them (single activation authority). dc__pim_upsert_smart, dc__entity_upsert (no template_id), and dc__propose_template_binding return authoring_proposal_required when classification would mint — no entity write occurs. Review via dc__list_pending_template_authoring, promote with dc__confirm_template_authoring, or reject with dc__reject_template_authoring. Confirm (and mint/amend) never keeps a brand+model or other particular title as template.name when class_instance_dissent / class_instance_wall is PARTICULAR or mint_blocked — the name is forced to the generic concept label (from concept_slug / entity_type) or confirm refuses.
+  Authoring fail-closed: any governed authoring failure (find_or_amend_template error state, walker/model-fill abort, amend JSON blobs) returns a clean error and persists ZERO template rows at any status — no placeholder or error-derived template births.
+  Governed amend_template (contextualizer-registry): in-place attribute upserts + required-set only. Identity fields and status are immutable. Persist is getTemplateCollection() upsert:false after a correction snapshot. Shared templates (not visibility=app_scoped with a single created_for_app_id) are Core/platform-seat only and always propose→confirm. App seats may amend only their own app-scoped templates, using the app template_confirmation.mode. Every persist stamps actor (seat + caller) and the confirmation reference. rollback-correction restores only a snapshot whose prior_doc hash-matches template_correction_snapshots for that template id (ROLLBACK_UNVERIFIED_PRIOR_DOC otherwise). Writer-closure stays closed — do not route amends through Volcano mongo_insert on template_registry.
+  Shape law at classification: before mint, no-hint classification compares proposed attribute shape against same-kind actives (threshold SHAPE_EQUIVALENCE_THRESHOLD=0.88). Same kind + equivalent shape + different values = VALUE_VARIANT — resolves to existing template, never authors.
+  Lifecycle vocabulary: assets RETIRE (derived records from owns); entities DISSOLVE (waiting room, never a home). Both are deliberate platform lifecycle states.
+  rel:instance_of hook edge: created automatically with owns derivation (asset→product lineage); cascade-cleaned when owns edge is deleted.
+  Placeholder identity lint: template names, ids, concept slugs, and type_keys containing {{ are rejected with placeholder_id_rejected at authoring and binding doors. Relationship propose/confirm tests BOTH endpoint legs.
+  Recommended bootstrap flow: (1) dc__describe_platform → understand capabilities, (2) dc__discover_app_schema → get your data model blueprint with templates, schemas, relationships, and plane routing, (3) dc__propose_template_binding per entity → confirm each template binding, (4) dc__pim_upsert / dc__entity_upsert → create entities with confirmed templates. Relationships (when present in schema): dc__propose_relationship_binding → dc__confirm_relationship_binding (first-use gated) → relationship-manager.semantic_upsert; list edges with dc__relationship_list or GET /public/relationships; verify counts via the total field.
+- **api_ingest**
+  GET /public/api-ingest/stored-values is LATEST + a short series per owned lane. It is the Home card door. It is not an issued-forecast archive.
+  Issued multi-day forecasts emit event:forecast.snapshot.persisted on instance_ingest success (Pulsar domain.events.<tenant> → Timescale forecast_snapshots). Query GET /public/api-ingest/forecast-snapshots or dc__query_forecast_snapshots by issued_at / valid_for. Health pings and current/observation lanes do not persist. LATEST stored-values is unchanged.
+  Compare and score: GET /public/api-ingest/forecast-snapshots/compare|score and dc__compare_forecast_snapshots / dc__score_forecast_snapshots. Actuals are Open-Meteo historical (default) or this app's linked station observations. Score requires caller metrics — there is no default global metric. Missing data is honest empty, never invented.
+  Do not use a browser snapshot-ring as source of truth for accuracy / #1 / streak / days-scored.
 - **weather**
   GET /public/weather/current resolves current conditions through canonical API Ingest weather providers (Google Weather, Open-Meteo, MET Norway) and only falls back to OpenWeather for legacy app runtimes.
   Callers can provide either city or latitude/longitude. When only city is provided, the platform geocodes it before hitting coordinate-based weather providers.
   Use response.weather as the stable normalized current-weather payload. response.data remains the raw API Ingest preview payload for debugging and provider-specific iteration.
+- **events**
+  Browser/runtime twin of dc__emit_event and dc__query_events. Same validation, Pulsar domain.events.<tenant> publish, and Timescale domain_events query. Not a second events system.
+  Auth: Contact JWT or App JWT with entity:read (query) or entity:write (emit). ev_* may query the bound room only (same empty as a miss when the subject is missing or foreign). Wrong/missing auth returns JSON 401/403 — never Kong "no Route matched with those values" once this door is live.
+  event_type must be an ACTIVE standards-plane event_types id (e.g. event:job.posted). Unknown or inactive types return honest JSON (event_type_not_found / event_type_not_active), not a router 404.
+  Demand-style lists (posted/accepted/cancelled): GET /public/events?event_type=event:job.posted,event:job.accepted,event:job.cancelled (comma-separated) or event_types as a repeated query/body array. Do not invent a /demand Core route — that page is overlay; it queries this door.
+  Do not put vertical job fields in Core. Attributes and ref_slots come from the event type registry / overlay.
+  event:job.posted allows optional attributes.test (boolean) as a sandbox marker. Persist test:true on the event, never in the job name. Other job.* types are unchanged; existing events are not auto-tagged.
+  Structure writes (entity upsert, PIM products, relationship edges) are receipted in platform_audit_log door-log, NOT domain_events. Cite door_log_id from write responses; verify with dc__get_door_log_entry / dc__list_door_log (platform:read, own app only).
 
 ## Direct Mongo Guidance
 - Storage mode: `shared`
@@ -485,82 +637,146 @@ Call `dc__refresh_app_rules` to sync this file and `docs/devcockpit-deployment.m
 - Use App Instances to configure dedicated Mongo; MCP never returns the raw URI.
 
 ## Available Platform Tools
-- `dc__describe_platform` — Describes the DevCockpit platform, your app, available agents, public API routes, data models, authentication, and top-level app/MCP scopes. Call this first to understand what you can do. For binding-specific runtime scopes, inspect dc__get_data_connection.
-- `dc__discover_app_schema` — Discover the data model for your app. Returns matching entity templates with full attribute schemas, relationships between them, and which data plane each entity routes to (PIM vs Entity Registry). Call after dc__describe_platform and before creating any entities. Provide entity_hints for specific entities, an archetype for pre-filtered blueprints, or just a domain description for broad discovery.
-- `dc__plan_architecture` — Ask Agent Manager to map your app requirements to DevCockpit platform services and persist a suggested contract draft before you build. Planning does not seed allowlist entries or data-source bindings.
-- `dc__export_app_contract` — Returns the current persisted app contract if one exists, plus the current archetype, latest validation state, and available archetypes. Fresh apps may return `contract: null` until planning or scaffolding persists a baseline.
+- `dc__describe_platform` — Describes the DevCockpit platform, your app, available agents, public API routes, data models, authentication, Standards Plane guidance, discoverable step-template patterns, and top-level app/MCP scopes. Call this first to understand what you can do. For binding-specific runtime scopes, inspect dc__get_data_connection.
+- `dc__plan_architecture` — Ask Agent Manager to map your app requirements to DevCockpit platform services and persist a contract draft before you build. Planning does not seed allowlist entries or data-source bindings.
+- `dc__export_app_contract` — Returns the current persisted app contract if one exists, plus the current archetype, latest validation state, and available archetypes. Fresh apps may return contract: null until planning or scaffolding persists a baseline.
 - `dc__validate_app_contract` — Runs preflight validation against the persisted app contract, checking bindings, scopes, routes, standards prerequisites, and agent runtime expectations. If no contract exists yet, persist one first via dc__plan_architecture or dc__scaffold_app_domain.
-- `dc__scaffold_app_domain` — Apply an archetype scaffold that seeds required bindings, allowlist entries, standards guidance, and a contract baseline for this app. Use this after planning when validation gaps still exist.
+- `dc__scaffold_app_domain` — Apply an archetype scaffold that seeds bindings, allowlist entries, standards guidance, and a contract baseline for this app. Use this after planning when validation gaps still exist.
 - `dc__app_status` — Returns this app's current status, provisioning state, builder plan summary, and hosting info.
-- `dc__get_data_connection` — Returns safe runtime connection metadata for this app, including storage mode, public API bases, enabled data-source bindings, and binding-specific runtime scopes. These binding scopes can be narrower than the top-level app scopes shown by dc__describe_platform. Secrets are never returned.
+- `dc__get_data_connection` — Returns safe runtime connection metadata for this app, including storage mode, public API bases, enabled data-source bindings, binding-specific runtime scopes, Standards Plane / provenance guidance, and memory guidance. These binding scopes can be narrower than the top-level app scopes shown by dc__describe_platform. Secrets are never returned.
 - `dc__list_agents` — Lists all agents on this app's allowlist with their descriptions and available workflows. Legacy single-workflow agents are surfaced as a default workflow so they do not disappear from discovery. Treat this as the canonical callable set for app-scoped execution.
+- `dc__get_agent` — Fetch the full agent definition from the agent registry for an app-owned agent. Returns volcano_config, deployment stage, tags, and lifecycle metadata.
+- `dc__list_agent_executions` — Query execution history for an app-owned agent from the agent registry execution-history store.
 - `dc__tool_schema` — Returns the live input schema and source details for a specific tool name (platform or agent workflow).
 - `dc__get_data_schema` — Returns JSON schema / field definitions for a given data type (entity, asset, pim_product, infrastructure).
 - `dc__get_api_routes` — Returns the public REST API routes that your generated frontend should call, with auth instructions. Static-export frontends should use these /public/* surfaces instead of inventing local Next.js API routes for secret-bearing production flows.
-- `dc__store_memory` — Stores an app-scoped memory record using a canonical entity_id such as app:<app_id>, asset:<id>, field:<id>, or legal_entity:<id>.
-- `dc__recall_memories` — Recalls memories for a canonical entity_id, optionally including related-entity memories.
+- `dc__create_app_api_key` — Mint an ak_* API key for the calling app (builder surface — same as CP App Instances → Create API Key). Returns the full key once; exchange via POST /auth/app-token with x-api-key for App JWT on /public/* routes.
+- `dc__exchange_app_token` — Mint a short-lived App JWT for /public/* self-tests. Without api_key: signs from MCP session scopes (builder self-test). With ak_* api_key: exchanges via POST /auth/app-token (production path).
+- `dc__store_memory` — Stores an app-scoped memory record using a canonical entity_id such as app:<app_id>, asset:<id>, field:<id>, legal_entity:<id>, or api_pipeline:<id>.
+- `dc__recall_memories` — Recalls all memories for a specific canonical entity_id (e.g. "app:app_123", "asset:uuid", "field:field_42"), optionally including related-entity memories. Requires entity_id — for general text search without an entity scope use dc__search_memories instead.
 - `dc__search_memories` — Full-text search across this app's stored memories.
-- `dc__search_memory_events` — Search grouped memory events by event_id, event_type, and recent corroborating memories.
-- `dc__get_memory_corroboration` — Load all memories and graph context tied to a single memory event_id.
-- `dc__deploy_app` — Returns deployment instructions for this app. Deploys go to SANDBOX by default at sandbox.devcockpit.ai/apps/<app_id>/. Pass target=production to skip sandbox. Auto-injects env-config.js with ENVIRONMENT, APP_BASE_PATH, Firebase config, and runtime error overlay.
-- `dc__promote_app` — Request promotion of sandbox build to production. Creates a pending promotion (10 min expiry) with sandbox URL for human review — does NOT push to production until dc__confirm_promotion.
-- `dc__confirm_promotion` — Confirm a pending promotion after developer review. Executes sandbox → production copy and updates production deploy state.
-- `dc__deploy_status` — Returns sandbox and production frontend deploy state for this app, including URLs, deploy versions, and last_deployed_at timestamps.
+- `dc__search_memory_events` — Search grouped event-driven memories by event_id, event_type, or memory content.
+- `dc__get_memory_corroboration` — Load all memories, related entities, and graph corroboration for a single event_id.
+- `dc__deploy_app` — Returns deployment instructions for this app. Deploys go to SANDBOX by default (sandbox.devcockpit.ai/apps/<app_id>/). Pass target=production to deploy directly to production. Hosted deploys auto-inject env-config.js with ENVIRONMENT, APP_BASE_PATH, and a runtime error overlay.
+- `dc__promote_app` — Request promotion of the current sandbox frontend build to production. Creates a PENDING promotion (10-minute expiry) — does NOT copy files until dc__confirm_promotion is called after human review of the sandbox URL.
+- `dc__confirm_promotion` — Confirm a pending promotion after the developer has reviewed the sandbox build. Copies sandbox to production and re-injects env-config.js with ENVIRONMENT=production.
 - `dc__deploy_backend` — Triggers a one-click backend deploy for this app (GitHub Actions workflow-dispatch). Writes backend_deploy_* events into platform_audit_log and stores desired backend config in config_settings.settings.backend. This exposes an app backend/API route and does not replace the hosted frontend path at /apps/<app_id>.
-- `dc__store_app_secret` — Store a secret in Vault for this app only (secret/app/<app_id>/<key>). Session app_id is authoritative. Values are never echoed on write.
-- `dc__get_app_secret` — Read a secret from Vault for this app. Returns found:false when absent.
-- `dc__provision_app_github` — One-time setup: store GitHub token and repo URL/name in Vault and config_settings for the Fix Loop and deploy workflows.
-- `dc__set_custom_domain` — Sets a custom domain for this app and returns DNS instructions. The customer points their domain A record to our server, and SSL is auto-provisioned via Let's Encrypt.
-- `dc__configure_hosted_self_signup` — Enables or rotates hosted browser self-signup for this app. Generates a non-secret public registration client_id, stores the hosted signup policy, and injects the client_id into window.__DEVCOCKPIT__ on the next deploy.
-- `dc__get_firebase_config` — Returns the Firebase web SDK configuration for user authentication in the current environment. Use the returned values instead of assuming project IDs or hostnames.
-- `dc__api_ingest_chat` — Start or continue the async API ingest workflow for this App Instance. Use this supported platform tool instead of raw api-ingest-orchestrator__* workflows from app-scoped MCP. The first call creates a session and returns normalized status plus next_action; poll dc__api_ingest_session_get until you reach a terminal state.
+- `dc__set_custom_domain` — Binds a custom hostname to this app's hosted zip for production or sandbox. Writes an nginx vhost (www + apex when the name is the registrable domain), persists settings, and returns the exact DNS A records. TLS is Cloudflare Universal SSL (orange-cloud + Full, not Strict) — not certbot. Pass confirm_tls=true after HTTPS works. {app_id}.devcockpit.ai is a different feature.
+- `dc__configure_hosted_self_signup` — Enables or rotates hosted browser self-signup for this app. Generates a non-secret public registration client_id, stores the hosted signup policy, and injects the client_id into window.__DEVCOCKPIT__ on the next deploy. New-user browser flow: Firebase sign-up/login -> POST /public/identity/auth/register-token -> POST /public/identity/auth/register -> POST /public/identity/auth/exchange. Returning Google/email users skip register-token and call exchange only; a register-token 403 with fatal_for_signin:false is not a sign-in failure.
+- `dc__get_firebase_config` — Returns the public Firebase web SDK config when the server can reconstruct the same FIREBASE_WEB_* / hosted env-config.js inject used for window.__DEVCOCKPIT__. Not the only Firebase source of truth. Hosted apps should read window.__DEVCOCKPIT__ and prove login on the hosted URL after deploy inject. An empty or inject_only payload is not "Firebase disabled" if those inject fields exist on the app record or hosted env-config.js.
+- `dc__api_ingest_chat` — Start or continue the async API ingest workflow for this App Instance. Use this supported platform tool instead of raw api-ingest-orchestrator__* workflows from app-scoped MCP. The first call creates a session and returns immediately with session state; poll dc__api_ingest_session_get until you reach a terminal state such as activated or failed.
 - `dc__api_ingest_session_get` — Poll an API ingest session started by dc__api_ingest_chat. Returns normalized status, workflow_state, next_action, validation, provenance, and credential wait states so you can resume async API setup safely.
-- `dc__dam_ingest_url` — Ingest a remote document/image URL into DAM for this app.
-- `dc__pim_upsert` — Create or update a PIM product for this app. template_id must be a registered contextualizer template. Writes to the correct products collection (dedicated or shared), emits shadow sync, and returns the saved product. Use this instead of raw MongoDB inserts for all catalog/product data.
-- `dc__pim_upsert_smart` — Universal entity creation with automatic template resolution and smart routing. The contextualizer pipeline classifies the entity and resolves the appropriate template. Products and materials route to the PIM products plane; all other IKU categories (parties, animals, infrastructure, etc.) route to the Entity Registry. Use this when you do not have a template_id or are unsure which plane to target — the platform figures it out.
-- `dc__entity_upsert` — Create or update an entity in the Entity Registry. Use this for non-product entities such as legal entities, farms, animals, infrastructure, environmental records, or compliance documents. Requires entity_type (e.g. "legal:company"). Template is resolved automatically from entity_type if template_id is not provided. The Entity Registry supports documents[], compliance{}, contacts, and entity lifecycle (draft/active/suspended/dissolved).
-- `dc__asset_list` — List assets from the Entity Registry (Digital Twin Registry). Supports filtering by type, status, owner, IMEI, stream health, and text search. Includes pagination and link expansion.
-- `dc__asset_upsert` — Create or update an asset in the Entity Registry. Supports digital twin fields: serial_number, imei, registration_number, owner_entity_id, pim_product_id, data_stream. Provide id to update.
-- `dc__asset_provenance` — Get the full provenance chain for an asset: Owner → Product → Asset → Data Stream → Relationships. Returns chain_completeness (full/partial/orphaned). Uses cross-plane reads to assemble the view.
-- `dc__iot_device_register` — Canonical MCP write path for IoT devices. Registers a device in pim-db.devices via iot-shack so it appears in the farmer-portal IoT page and /public/iot/devices. Use this instead of dc__entity_upsert or dc__pim_upsert for anything with an IMEI, serial number, or MQTT topic. Idempotent via read-before-write on (tenant, deviceId). Requires iot:write scope.
+- `dc__query_forecast_snapshots` — Query this app's issued forecast archive (not LATEST stored-values). Filter by issued_from/issued_to and valid_for/valid_from/valid_to so Weather can drive #1 / streak / days-scored without a browser snapshot-ring. Empty is honest when no snapshots match. Requires api_ingest:read.
+- `dc__compare_forecast_snapshots` — Compare issued forecast days to observed actuals for the same day/location. actuals_source: open_meteo_historical (default when no station observations), station (this app's current/observation ingest), or auto. Does not invent forecasts or actuals — missing actuals return actuals_missing:true. Requires api_ingest:read.
+- `dc__score_forecast_snapshots` — Rank forecast providers by the caller's preferred metric(s) (precip, wind_speed, temp_min, temp_max, …). No default global metric — omitting metrics returns empty_reason:metrics_required plus available_metrics. MAE / days_scored / streak use only days where both forecast and actual exist. Requires api_ingest:read.
+- `dc__list_pipelines` — Lists API ingest pipelines visible to this app. Each entry includes pipeline_id, alias (e.g. nasa.planetary_apod), provider, endpoint_id, api_id, and enabled state. Use the alias when calling dc__get_pipeline_by_alias instead of memorizing pipe_<sha> ids. Phase 3 (Platform Contract v1).
+- `dc__get_pipeline` — Fetch full pipeline detail for a pipeline_id owned by this app. Returns purpose/run_kind, enabled, next_run_at, vault fallback fields, last_error, last_run, last_success, request.query, and alias when registered. Use this instead of dc__list_pipelines when you already have the pipeline_id (e.g. from ingest setup). Returns pipeline_not_found (404) or pipeline_not_app_owned when the id is foreign.
+- `dc__health_ping_pipeline` — Run an explicit health_ping against an app-owned pipeline using stored Vault credentials. Optional lat/lon apply at request time only — they are never persisted and never flip purpose to instance_ingest. Does not enable the scheduler. Returns run_id immediately; poll dc__get_pipeline for last_error (vault_credential_fallback:* vs upstream_error:*) and vault fallback timestamps. Do NOT use dc__run_pipeline for connector health checks.
+- `dc__get_pipeline_by_alias` — Resolve a pipeline alias (provider.endpoint, e.g. metos.station_data) to its pipeline_id and full pipeline detail for this app. Returns 409 if the alias points at a deleted pipeline. Phase 3 (Platform Contract v1).
+- `dc__update_api_endpoint` — Change the stored path (or absolute url) of one endpoint on an existing external API. Does not remint the API, does not rewrite templates, and does not touch credentials or Vault. Runtime joins base_url + path — use this when mint stored a product-root path. Requires api_ingest:write and an API owned by this app or an owned pipeline on that api_id.
+- `dc__update_pipeline` — Update an API ingest pipeline configuration. Change the polling interval (schedule_interval in seconds), store_mode (telemetry/api_telemetry/both/pim/domain_events), ingest_mode (pulsar/timescale/dual), or enabled state. domain_events emits governed domain events on the mapping relationship subject (e.g. weather readings on a Place twin). Use dc__list_pipelines to get the pipeline_id first. Changes take effect on the next scheduled run. Does not set request.query — use dc__update_pipeline_query for instance lat/lon.
+- `dc__update_pipeline_query` — Persist request.query on an app-owned pipeline (instance lat/lon and provider query keys) via PATCH /api/pipelines/:id/query. Use this when dc__update_pipeline cannot set query. Optional enabled flips the scheduler only when the query already looks like an instance geo query.
+- `dc__run_pipeline` — Trigger an immediate one-off instance ingest run of an API ingest pipeline, bypassing its schedule. Returns a run_id immediately; the ingest runs asynchronously. Optional run_kind selects instance_ingest vs health_ping. For connector health checks with request-time coords, prefer dc__health_ping_pipeline.
+- `dc__delete_pipeline` — Hard-delete an API ingest pipeline owned by this app. Refuses pipelines whose app_id does not match the calling app (tenant-wide deletes are not allowed via MCP). Use dc__list_pipelines first. Irreversible — prefer dc__update_pipeline with enabled:false to pause. Ops UI fallback: Data Pipeline → Data Flow Manager → Delete Pipeline.
+- `dc__dam_ingest_url` — Ingests a remote document/image URL into DAM for this app: downloads the URL, uploads to Spaces, creates the asset, and triggers DAM processing (async).
+- `dc__pim_upsert` — Create or update a PIM product for this app. template_id MUST be a registered contextualizer template (use ctx-template-get to verify). Writes to the correct products collection (dedicated or shared), emits shadow sync, and returns the saved product. Use this instead of raw MongoDB inserts to ensure shadow sync, template validation, and cross-app discovery.
+- `dc__pim_upsert_smart` — Create or update a PIM product with automatic template resolution. If template_id is omitted, the contextualizer pipeline classifies the entity and resolves or creates the appropriate template before writing. Use this when you do not know the template_id upfront.
+- `dc__entity_upsert` — Create or update an entity in the Entity Registry. Use this for non-product entities such as legal entities, farms, animals, infrastructure, environmental records, or compliance documents. Requires entity_type (e.g. "legal:company", "animal:cattle", "infrastructure:dam"). Template is resolved automatically from entity_type if template_id is not provided.
 - `dc__propose_template_binding` — Propose a template binding for an entity before committing it to a data plane. Runs template classification (read-only for entity data) and returns a structured proposal with schema, relationships, confidence score, and a human-readable markdown summary. Call dc__confirm_template_binding to commit or dc__reject_template_proposal to reject. No entity data is written until confirmation.
-- `dc__confirm_template_binding` — Confirm a previously proposed template binding and commit the entity to the correct data plane (PIM products or Entity Registry). Records template usage, snapshots the schema version, and emits an audit event.
+- `dc__confirm_template_binding` — Confirm a previously proposed template binding and commit the entity to the correct data plane (PIM products or Entity Registry). Records template usage, snapshots the schema version, and emits an audit event. Verification from the consuming seat: after confirm, re-read the entity via dc__entity_get / dc__pim_get (or the plane you wrote) and treat template_usage_recorded=false as incomplete even if success=true.
 - `dc__reject_template_proposal` — Reject a template binding proposal. No entity data is written. The rejection reason is recorded as a training signal for the contextualizer.
+- `dc__propose_relationship_binding` — Propose a relationship (edge) binding before committing it. Resolves endpoint kind/iku from entity_registry or the PIM products record (Specification/Class catalog rows included), honors explicit from_iku/to_iku (and from_kind/to_kind) when provided, then checks the standards-plane relationship_types contract. Returns a structured proposal. No edge is written until dc__confirm_relationship_binding. A missing or illegal shape is author-gated (relationship_binding_unresolved) and NEVER auto-authored.
+- `dc__confirm_relationship_binding` — Confirm a previously proposed relationship binding. This registers the binding (proposal) for your app — stamps relationship_template_id, records usage, and emits an audit event — but does NOT write the edge: the response carries persisted:false and edge_exists:false. The edge is materialized only by the single edge writer, relationship-manager__semantic_upsert (or POST /public/relationships). An app that stops at confirm has written nothing.
+- `dc__relationship_list` — List relationship edges for this app. Mirrors GET /public/relationships with filters and total count. Requires relationships:read scope.
+- `dc__relationship_delete` — Delete a relationship edge by Mongo _id. Governed removal for bad or orphan edges — same auth as DELETE /public/relationships/:id (relationships:write scope).
 - `dc__list_pending_proposals` — List template binding proposals for this app. Call at session start alongside dc__get_platform_deltas to check for orphaned proposals from previous sessions. Defaults to pending proposals only.
-- `dc__confirm_template_authoring` — Promote a pending_review template to active after human review. Required before low-confidence authored templates become resolvable or bindable.
-- `dc__list_pending_template_authoring` — List templates awaiting authoring review (metadata.status pending_review). Invisible to resolution until confirmed.
+- `dc__confirm_template_authoring` — Promote a pending_review template to active after human review. Required before low-confidence authored templates become resolvable or bindable. If class_instance_dissent marks PARTICULAR / mint_blocked, confirm force-renames template.name to the generic concept label (from concept_slug / entity_type) or refuses — brand+model titles stay on the instance, never the type.
+- `dc__list_pending_template_authoring` — List templates awaiting authoring review (metadata.status pending_review). These templates are invisible to resolution until confirmed.
 - `dc__reject_template_authoring` — Remove a pending_review template that should not enter the Standards corpus.
-- `dc__handoff_post` — Posts a short handoff note for this app into DevCockpit. The note body and tags are persisted in platform_audit_log and a cursor_handoff event is emitted for observability.
-- `dc__handoff_list` — Lists recent handoff notes for this app from DevCockpit, including message, tags, timestamp, and author_key_id when available.
-- `dc__list_skills` — List available skills filtered by tier, visibility, domain, or search text before composing a manifest-backed agent.
-- `dc__create_agent` — Create a new app-scoped agent. Manifest mode resolves skills and returns a reviewable manifest with refine/commit/test/discard actions; explicit volcano_config mode persists immediately. Smoke-test committed browser-facing agents with dc__execute_agent before wiring them into frontend code.
-- `dc__refine_agent` — Update refinable fields on an uncommitted agent manifest and re-run validation.
-- `dc__commit_agent` — Commit a manifest-backed agent to agent_definitions and return bootstrap_status plus ready_for_execution. Supports retry_bootstrap for pending bootstrap recovery.
+- `dc__discover_app_schema` — Discover the shared public ontology and data model available to your app. Call with no arguments to see the full shared core_global/public template set. Optionally narrow with domain, entity_hints, or archetype. Returns matching templates with attribute schemas, relationships, and plane routing (PIM vs Entity Registry). Call this BEFORE creating entities to understand what the platform already models.
+- `dc__emit_event` — Emit a governed, schema-validated, timestamped domain event about a structural twin. Events are NOT entities — refs (performed_by, vaccine_batch, etc.) are carried by the event and validated against event_types ref_slots, not graph edges. Publishes CloudEvent to domain.events.<tenant> via platform gateway (apps never write Pulsar directly). Requires an ACTIVE event type in the standards-plane event_types registry. Committed event:room.note.posted also fans out envelope-only wakes to bot member seats (never the author); wake JSON has secret-redacted text_preview ≤240 plus full secret-redacted text.
+- `dc__query_events` — Query governed domain events from TimescaleDB domain_events hypertable (timestamped facts emitted via dc__emit_event only). Structure writes (entity upsert, PIM products, relationship edges) are NOT in this store — use door_log_id + dc__get_door_log_entry. Filter by subject or entity_id (matches subject_id or any ref slot), event_type, time range, or ref slot.
+- `dc__get_door_log_entry` — Read one platform door-log receipt from platform_audit_log by door_log_id. Returns status (pending | failed | committed). Strict app scoping: returns the entry only when it belongs to the calling app seat; cross-app ids are refused as door_log_not_found. Requires platform:read.
+- `dc__list_door_log` — List recent platform door-log receipts for the calling app only (platform_audit_log). Each entry exposes status (pending | failed | committed). Strict app scoping — no cross-app reads. Requires platform:read.
+- `dc__evaluate_compliance` — Evaluate deterministic compliance verdicts (COMPLIANT / NON_COMPLIANT / PENDING) over recorded domain events. Read-only — never blocks emit. Only ACTIVE compliance_rules judge. R3/R4 evaluate at the event occurred_at, not wall-clock now.
+- `dc__handoff_post` — Posts a short handoff note for this app into DevCockpit. The note body and tags are persisted in platform_audit_log and a cursor_handoff event is emitted for observability. Use this to coordinate between multiple Cursor instances working on the same app. Refuses when the session app is not active. Verification from the consuming seat: the chain is not done until that seat's dc__handoff_list shows the note.
+- `dc__handoff_list` — Lists recent handoff notes for this app from DevCockpit. Returns persisted message, tags, timestamp, and author_key_id for recent cursor_handoff notes. Archived/resolved messages are hidden by default.
+- `dc__ops_handoff_list` — Operator tool: lists recent handoff notes for any app in this tenant. Requires platform:ops scope on the calling key. Pass the target app_id explicitly. Use this to read another app's mailbox as a platform operator.
+- `dc__ops_handoff_post` — Operator tool: posts a handoff note into any app's mailbox in this tenant. Requires platform:ops. Identify the live receiving seat first (active app_id from their dc__handoff_list / dc__describe_platform) — refuses inactive/deleted targets unless allow_inactive_target=true. Verification from the consuming seat: done only when that seat's dc__handoff_list returns the note.
+- `dc__create_agent` — Create a new app-scoped agent. Two modes: (1) Manifest-backed â€” provide name, description, domain, and capabilities without volcano_config. Agent Creator composes a proposed workflow and returns a manifest with actions for dc__refine_agent, dc__commit_agent, dc__test_dry_run, and dc__discard_manifest. (2) Explicit â€” provide name, description, and volcano_config with a full workflow definition for deterministic immediate creation. Explicit mode auto-adds the agent to this app's allowlist. Manifest mode does not create an agent until dc__commit_agent succeeds. Prefer explicit volcano_config for production agents. For browser-facing bridge workflows, reject outputs that return processing/continue, unresolved template placeholders, or internal_data:null when the frontend expects synchronous JSON. Canonical volcano_config top-level shape: { workflows: { default: { steps: [...] } }, default_workflow: "default" }. Use provider-specific step fields, not ad-hoc tool/input_map shapes.
+- `dc__refine_agent` — Update refinable fields on an uncommitted agent manifest. Allowed changes are name, description, and capabilities. Re-runs capability-to-skill resolution and validation.
+- `dc__commit_agent` — Commit a manifest-backed agent to agent_definitions. Re-validates skill versions, persists the agent, and returns bootstrap_status plus ready_for_execution. Pass retry_bootstrap:true to retry a previously pending bootstrap.
 - `dc__test_dry_run` — Validate and expand a manifest-backed workflow in Volcano dry-run mode without executing provider side effects.
 - `dc__discard_manifest` — Discard an uncommitted manifest-backed agent proposal.
-- `dc__get_skill_telemetry` — Return per-skill telemetry plus pending observations for the current tenant or an app-owned agent scope.
-- `dc__review_skill_observations` — Confirm or reject low-confidence observations captured for a skill specialization.
-- `dc__trigger_recompilation` — Force recompilation of a tenant- or agent-scoped skill specialization.
-- `dc__promote_agent` — Promote an app-owned agent to a new deployment stage such as draft -> staging or staging -> production. Use the to_stage field and follow the linear promotion path; do not call raw agent-registry lifecycle calls from app-scoped MCP.
-- `dc__archive_agent` — Archive an app-owned agent so it is retired from active app use. Use this instead of raw agent-custodian archive calls from app-scoped MCP.
-- `dc__restore_agent` — Restore a previously archived app-owned agent so this app can use it again. Use this instead of raw agent-custodian restore calls from app-scoped MCP.
-- `dc__execute_agent` — Execute an allowlisted agent workflow through the supported MCP Gateway -> Volcano path. Internal visibility and allowlist rules are re-checked server-side; do not call raw Volcano HTTP execute routes from app-scoped MCP.
-- `dc__repo_push` — Commit and push files to this app's GitHub repository. Provide full file contents (not diffs). Max 100 files per commit. After pushing, call dc__deploy_backend to deploy — pushes do NOT auto-deploy.
-- `dc__repo_pull` — Read files or list the tree from this app's GitHub repository. Provide paths[] for file contents, or omit for a tree listing.
-- `dc__repo_status` — Get this app's GitHub repository status: HEAD commit, branch info, and whether the repo is empty.
-- `dc__repo_delete` — Delete files from this app's GitHub repository by creating a commit that removes them.
-- `dc__refresh_app_rules` — Regenerate and push .cursor/rules/devcockpit-integration.mdc and docs/devcockpit-deployment.md from the current platform manifest. Call when platform capabilities change or rules feel stale.
-- `dc_fix__diagnose_and_fix` — Report a platform bug and have it automatically diagnosed, fixed, deployed, and verified by a cloud agent. Returns a fix_id immediately; poll dc_fix__check_status for progress. Use when a tool fails with 500 or returns wrong data — not for missing features.
-- `dc_fix__resolve_config` — Resolve a non-code platform issue: missing scope, allowlist entry, template binding, config error, or stale data. Spawns a cloud agent focused on config_settings. Use when a tool returns 403 insufficient_scope, tool_not_allowed, or config errors — not for 500 code bugs.
+- `dc__promote_agent` — Promote an app-owned agent to a new deployment stage using the supported app-scoped lifecycle path. Use the `to_stage` field. Promotions are linear: draft -> staging -> production, with demotions back one stage when needed. Do not call raw agent-registry lifecycle workflows from app MCP.
+- `dc__archive_agent` — Archive an app-owned agent. This is the supported app-scoped lifecycle path; do not call raw agent-custodian archive workflows from app MCP.
+- `dc__restore_agent` — Restore a previously archived app-owned agent. This is the supported app-scoped lifecycle path; do not call raw agent-custodian restore workflows from app MCP.
+- `dc__update_agent` — Partially update an app-owned agent in the agent registry. Supports description, tags, workflow changes via volcano_config/workflow, and ai_config (pass null to clear a stale model pin — runtime already ignores legacy ai_config). volcano_config.workflows are MERGED with existing workflows by default (siblings stay intact). Pass replace_workflows:true only when intentionally replacing the full workflow map. Prefer this over creating duplicate agents when refining an existing definition.
+- `dc__delete_agent` — Hard-delete an app-owned agent from the agent registry. Requires agents:write and app ownership. Irreversible — prefer dc__archive_agent for normal retirement.
+- `dc__execute_agent` — Execute an allowlisted agent workflow through the supported MCP Gateway -> Volcano path. Internal visibility and allowlist rules are re-checked server-side; do not call raw Volcano HTTP execute routes from app-scoped MCP. Markets live ingest (dry_run:false) returns HTTP 202 + run_id — success:true with an empty body is a fail. Poll the same agent with workflow "poll" and input.run_id.
+- `dc__get_platform_deltas` — Returns recent platform changes (agents registered/updated, templates created/updated, Yoda rules seeded, deploys) that affect this app or are global. Call at the start of a session to check for changes since your last work. Unread deltas may require action â€” check breaking: true entries first.
+- `dc__list_platform_learnings` — List already-distilled platform learnings (operational_memory.learnings). Requires platform:read. Returns insight text, owning agent, category, and the promotion gate (min_distinct_tenants stays 3). Does not return customer feedback rows, top_apps, or another seat's data. Empty is honest — not Processing. Setup-class scars are not in this store. Cross-app PIM still needs a grant and is a different surface.
+- `dc__get_platform_learning` — Get one already-distilled platform learning by id. Requires platform:read. Missing id returns learning_not_found (not an empty list). Does not return customer feedback rows.
+- `dc__create_sandbox` — Create an isolated sandbox copy of an existing app instance for development and testing. The sandbox gets its own database and MCP key but inherits the source app agent allowlist and template usage index. Template authoring is blocked in sandbox mode. Sandboxes expire after ttl_days (default 30).
+- `dc__list_sandboxes` — List existing sandbox app instances. Optionally filter by source app. Returns sandbox metadata including expiry and source app.
+- `dc__delete_sandbox` — Delete a sandbox app instance, drop its isolated database, revoke its MCP key, and clean up all sandbox metadata. Only works on sandbox apps â€” cannot delete production apps.
+- `dc__asset_list` — List assets from the Entity Registry. Supports pagination, filtering by type/status/owner/IMEI, and link expansion.
+- `dc__asset_upsert` — Create or update an asset in the Entity Registry. Provide id to update an existing asset. Supports digital twin fields: serial_number, imei, owner_entity_id, pim_product_id, data_stream.
+- `dc__asset_provenance` — Get the full provenance chain for an asset: Owner â†’ Product â†’ Asset â†’ Data Stream, plus platform relationships. Returns chain_completeness (full/partial/orphaned).
+- `dc__iot_device_register` — Register an IoT device in the canonical iot-shack devices collection (pim-db.devices) so it appears in the farmer-portal IoT page and the /public/iot/devices public API. Use this instead of dc__entity_upsert or dc__pim_upsert for anything with an IMEI, serial number, MQTT topic, or physical installation location. Idempotent within the caller app partition: if a device with the same deviceId already exists for this tenant and app_id, returns the existing record with existing:true; otherwise creates a new one and returns created:true. If the same deviceId is registered under a different app_id, returns HTTP 409 conflict (not existing:true) — cross-app ownership must be resolved by platform ops. Writes land under {tenant: app_tenant_id, app_id: app_id} partition keys from MCP context.
+- `dc__iot_device_update` — Patch product/unit/subject pointers on an app-owned IoT device without re-registering. Register is an idempotent create (same deviceId → existing:true, no overwrite). Use this door to unset or rebind productId, sku, templateId, and/or subject_entity_id. Empty or null means unbound. IMEI/deviceId identity changes are refused (DEVICE_IDENTITY_IMMUTABLE). App seats cannot update another app's device (device_not_owned). Writes an actor-stamped door-log entry. Requires iot:write.
+- `dc__refresh_app_dev_from_prod` — Copy production data into sandbox for this app with PII anonymisation. Reads all collections from app_{id}_prod, applies field-level PII hashing/redaction (emails hashed, free-text redacted), and writes the anonymised data into app_{id}_sandbox. Requires per-app dual-DB provisioning (storage_mode=dual). Safe to call multiple times â€” each invocation replaces sandbox data entirely.
+- `dc__provision_app_databases` — Provision per-app dual databases (sandbox + prod) on the Instance cluster for an existing app. Creates app_{id}_sandbox and app_{id}_prod databases. Idempotent â€” safe to call on apps that already have dual databases. Updates config_settings to storage_mode=dual.
+- `dc__pim_list` — List PIM products for the current app. Supports pagination, search, template filtering, and sort options.
+- `dc__pim_get` — Get a single PIM product by id.
+- `dc__pim_revoke_legacy` — Lifecycle-only revoke for a PIM row that physically lives in the caller's own store but whose template now routes to entity_registry (legacy mis-route). Two-phase door-log: intent pending → publish_state flip → committed. Failed intent aborts the flip. Requires pim:write.
+- `dc__pim_delete` — Delete a PIM product by id.
+- `dc__pim_revoke_legacy` — Lifecycle-only revoke for a PIM row that physically lives in the caller's own store but whose template now routes to entity_registry (legacy mis-route). Sets publish_state to revoked without changing content fields or deleting the row. Refuses NOT_OWN_STORE for another app's row, the shared catalog, or projected/shadow ghosts. Refuses if the template canonical plane is still pim (use dc__pim_upsert with publish_state=revoked instead). Refuses if live relationship edges or pending template binding proposals reference the row. Stamps platform_audit_log (event_type pim_legacy_row_revoked) before the publish_state flip; a failed stamp aborts the revoke.
+- `dc__catalog_write` — Governed catalog write: resolve/create a brand entity, dedup-resolve or mint a product (opaque prd_ UID), and link manufactured_by. Fail-closed — refuses to create unless a ratified match rule exists for the product class. App may NOT set sku/id.
+- `dc__catalog_match_rule_get` — Get the ratified catalog match rule for a product class/template. Returns fail_closed=true when no rule is configured (writes for that class are refused).
+- `dc__list_catalog_match_rules` — List all configured catalog match rules (platform-scoped). Empty = fail-closed for every class.
+- `dc__entity_list` — List Entity Registry instances linked to this app (entity_app_links). Cross-app instances are hidden unless granted. Specs/PIM catalog are separate (dc__pim_*).
+- `dc__entity_get` — Get a single Entity Registry instance by id. Requires an active entity_app_links grant for this app; otherwise returns cross_app_read_denied (403).
+- `dc__entity_delete` — Delete an entity by id from the Entity Registry.
+- `dc__entity_link_app` — Grant another app an active entity_app_links row so it can read the entity. Caller must already govern the entity (own a link). Audited.
+- `dc__entity_unlink_app` — Revoke an entity_app_links grant. Caller may unlink itself, or a governing app may revoke another app's grant.
+- `dc__iot_device_list` — List IoT devices from iot-shack. Supports pagination and filtering by status and type.
+- `dc__iot_device_get` — Get a single IoT device by deviceId from iot-shack.
+- `dc__iot_device_bind_subject` — Bind an app-owned IoT device to a governed observation subject (any kind: vehicle, animal, parcel, …). Required before dc__iot_telemetry_query. Marker-law apps must pass attributes.test_marker.
+- `dc__iot_device_unbind_subject` — Clear the subject bind on an app-owned device. Revokes readability via dc__iot_telemetry_query for that subject.
+- `dc__iot_telemetry_query` — Read Timescale telemetry for devices currently bound to a subject this app governs. Does not accept raw deviceId alone — bind first. Cross-app subjects are denied. Unbound devices return empty.
+- `dc__dam_list` — List DAM assets for the current app. Supports pagination and status filtering. Member-role callers see only their own uploads (scoped by uploaded_by). Staff / App JWT callers see all app assets.
+- `dc__dam_get` — Get a single DAM asset by id.
+- `dc__asset_get` — Get a single asset by id from the Entity Registry (asset-app-api).
+- `dc__asset_delete` — Delete an asset by id from the Entity Registry (asset-app-api).
+- `dc__delete_memory` — Delete a memory entry by memory_id from the entity_memories collection.
+- `dc__deploy_status` — Returns sandbox and production frontend deploy state for this app, including URLs, deploy versions, and last_deployed_at timestamps.
+- `dc__list_build_sessions` — List build sessions for this app. Shows the sequence of MCP tool calls made during app development, grouped by session (5-min inactivity gap = new session).
+- `dc__provision_app_repo` — Provision a new GitHub repository for this app from the DevCockpit template. Creates repo with bootstrap files (.env.template, DEVCOCKPIT.md, .cursor/skills/devcockpit-platform.md). Returns clone URL and next steps.
+- `dc__store_app_secret` — Store a secret in Vault for this app only. Path is secret/devcockpit/{env}/{tenant}/app-{app_id}/{key} (legacy secret/app/<app_id>/<key> is read as fallback). The app_id is taken from your MCP session — never from arguments. GitHub keys accept repo:write or app:configure; other keys require app:configure. Values are never echoed back. A Vault 403 is a policy denial on the gateway service token, not a bad PAT.
+- `dc__get_app_secret` — Read a secret from Vault for this app only (canonical secret/devcockpit/{env}/{tenant}/app-{app_id}/{key}; legacy secret/app/<app_id>/<key> is fallback). The app_id is the MCP session — never an argument. GitHub keys accept repo:write or app:configure. Credential-class keys return present, last4, and vault_path only — never plaintext. Non-credential keys return the value. Returns found:false when absent. A Vault 403 is a policy denial, not a bad PAT.
+- `dc__ops_store_app_secret` — Operator tool: store a Vault secret for any app in this tenant. Requires platform:ops. Identify the live receiving seat first — refuses inactive/deleted targets unless allow_inactive_target=true. Values are never echoed back. Never hand off bare local filesystem paths across seats. Verification from the consuming seat: their dc__get_app_secret must return found:true before the handoff is done.
+- `dc__ops_get_app_secret` — Operator tool: read a Vault secret for any app in this tenant. Requires platform:ops. Use to prove a cross-seat handoff artifact is pullable before posting mailbox instructions.
+- `dc__provision_app_github` — One-time app setup: store THIS app's GitHub token and repo coordinates in Vault (secret/devcockpit/{env}/{tenant}/app-{app_id}/github_*) and persist repo metadata in config_settings. Requires repo:write (app:configure also accepted). github_repo_url may include or omit a .git suffix. Token is never returned. A Vault 403 means the gateway service token lacks policy on the app secret path — not a bad PAT.
+- `dc__get_build_patterns` — Get distilled build patterns from past sessions. Shows common tool sequences, frequent errors, template usage, and recommended build approaches grouped by domain (livestock, crops, equipment, sensors, tracking). Use to understand best practices from previous builds.
+- `dc__list_dataflows` — List data flows — user-created and system pipelines. Shows how data moves through the platform including IoT telemetry, API ingest, MCP audit, PIM/DAM, shadow replication, and build session learning pipelines.
+- `dc__get_dataflow_status` — Get operational status of all data pipelines — shows throughput, errors, and health for IoT, API ingest, MCP audit, and PIM/DAM flows. Includes device counts, pipeline health, credential status, and data volumes.
+- `dc__repo_push` — Commit and push files to this app's GitHub repository. Provide full file contents (not diffs). Max 100 files per commit; request body up to ~5MB (code-content profile — TS/JSX not WAF-blocked). Requires repo:write scope. Prefer this over direct git for app-owned repos.
+- `dc__repo_pull` — Read files or list the tree from this app's GitHub repository. Provide paths[] to get file contents, or omit for a tree listing. Requires repo:read scope.
+- `dc__repo_status` — Get this app's GitHub repository status: HEAD commit, branch info, and whether the repo is empty. Reads THIS app's github_token from Vault. Requires repo:read scope. A Vault 403 is a policy denial on the gateway token, not a bad PAT.
+- `dc__repo_delete` — Delete files from this app's GitHub repository by creating a commit that removes them. Requires repo:write scope.
+- `dc__refresh_app_rules` — Regenerate and push .cursor/rules/devcockpit-integration.mdc and docs/devcockpit-deployment.md from the current platform manifest. Requires repo:write scope.
+- `dc_fix__diagnose_and_fix` — Report a platform bug and have it automatically diagnosed, fixed, deployed, and verified by a cloud agent. Returns a fix_id immediately; poll dc_fix__check_status for progress. Use when an MCP tool call fails with 500 or returns wrong data. Do NOT use for missing features — only bugs in existing tools.
+- `dc_fix__resolve_config` — Resolve a non-code platform issue: missing scope, missing allowlist entry, missing template binding, config error, or stale data. Spawns a cloud agent focused on config_settings. Use when a tool returns 403 insufficient_scope, tool_not_allowed, template_not_found, or a config-related error — NOT for 500 code bugs.
 - `dc_fix__check_status` — Check status of a previously reported fix by fix_id. Returns current status (running, deployed, no_fix, error) and result details.
 - `dc_fix__list_recent_fixes` — List recent automated fix attempts for this platform instance.
-- `dc__list_app_dependencies` — Lists MCP tools this app has called in the last 30 days (from mcp_events), with call counts. Use to understand platform tool dependencies before promoting to production.
-- `dc__list_tool_dependents` — Lists apps that depend on a given MCP tool (last 30 days), including whether they have production deploys.
-- `dc__check_tool_contracts` — Runs live contract tests against platform MCP tool response shapes. Returns pass/fail report for production safety verification.
+- `dc__list_app_dependencies` — Lists MCP tools this app has called in the last 30 days (from mcp_events), with call counts and production status. Defaults to the calling app when app_id is omitted.
+- `dc__list_tool_dependents` — Lists apps that depend on a given MCP tool (last 30 days), including production deploy status and call counts.
+- `dc__check_tool_contracts` — Runs live contract tests against platform MCP tools using a dedicated test app context. Returns pass/fail report for response field contracts.
 
 ## Hosting
-- Default URL: `https://devcockpit.ai/apps/app_wxppx6-6v5Wb/`
-- Subdomain URL: `https://app_wxppx6-6v5Wb.devcockpit.ai/`
+- Default URL: `https://devcockpit.ai/apps/app_6uGYXH7Zvzq3/`
+- Subdomain URL: `https://app_6uGYXH7Zvzq3.devcockpit.ai/`
 - Deploy with: `dc__deploy_app`
 
 ## Production Safety
