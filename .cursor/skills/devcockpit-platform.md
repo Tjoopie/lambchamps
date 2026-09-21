@@ -7,7 +7,7 @@ description: >
 
 # Building on DevCockpit
 
-You are building **Lambchamps** (app_id: `app_wxppx6-6v5Wb`) on the DevCockpit platform.
+You are building **LAMBCHAMPS** (app_id: `app_6uGYXH7Zvzq3`) on the DevCockpit platform.
 
 ## Session Start Checklist
 
@@ -49,7 +49,8 @@ Run these in order when setting up your app:
 
 ### Need IoT device data?
 → `/public/iot/telemetry` for reads
-→ `dc__iot_device_register` for writes
+→ `dc__iot_device_register` for create (idempotent)
+→ `dc__iot_device_update` or `PATCH /public/iot/devices/:id` to patch/unset productId
 → MQTT → Pulsar pipeline handles real-time ingestion
 
 ## Key Rules
@@ -156,6 +157,6 @@ In ALL cases: do NOT build direct MongoDB connections, raw LLM calls, or standal
 5. Skipping `dc__describe_platform` (leads to using deprecated/nonexistent tools)
 
 ## MCP Endpoint
-- URL: `https://devcockpit.ai/mcp/app/app_wxppx6-6v5Wb`
+- URL: `https://devcockpit.ai/mcp/app/app_6uGYXH7Zvzq3`
 - Auth: `Authorization: Bearer <MCP_KEY>`
 - Protocol: JSON-RPC 2.0 over HTTP POST
