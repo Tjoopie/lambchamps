@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "devcockpit": {
-      "url": "https://devcockpit.ai/mcp/app/app_wxppx6-6v5Wb",
+      "url": "https://devcockpit.ai/mcp/app/app_6uGYXH7Zvzq3",
       "headers": {
         "Authorization": "Bearer <YOUR_MCP_KEY>"
       }
