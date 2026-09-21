@@ -1,8 +1,8 @@
 # DevCockpit Integration
 
-**App**: Lambchamps
-**App ID**: `app_wxppx6-6v5Wb`
-**Description**: LambChamps Judging App
+**App**: LAMBCHAMPS
+**App ID**: `app_6uGYXH7Zvzq3`
+**Description**: LAMBCHAMPS VOTING APP
 
 ## Quick Start
 
@@ -26,7 +26,7 @@
 {
   "mcpServers": {
     "devcockpit": {
-      "url": "https://devcockpit.ai/mcp/app/app_wxppx6-6v5Wb",
+      "url": "https://devcockpit.ai/mcp/app/app_6uGYXH7Zvzq3",
       "headers": {
         "Authorization": "Bearer <YOUR_MCP_KEY>"
       }
